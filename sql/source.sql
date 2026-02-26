@@ -3,11 +3,10 @@
 -- Thin wrappers around read_lines that provide convenient interfaces
 -- for the common file-reading patterns agents use most.
 --
--- NOTE: sitting_duck defines a read_lines() macro in file_utilities.sql
--- that shadows the read_lines extension. If sitting_duck is loaded,
--- drop its macro first so the extension function is accessible.
--- This is a known interop issue (those macros predate the extension).
-DROP MACRO TABLE IF EXISTS read_lines;
+-- NOTE: sitting_duck defines a read_lines() table macro that shadows the
+-- read_lines extension. When both are loaded, the caller must drop
+-- sitting_duck's macro first: DROP MACRO TABLE IF EXISTS read_lines;
+-- See: https://github.com/teaguesterling/sitting_duck/issues/22
 
 -- read_source: Read lines from a file with optional line selection.
 -- This is the primary replacement for cat/head/tail bash commands.

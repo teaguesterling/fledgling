@@ -70,7 +70,10 @@ CREATE OR REPLACE MACRO find_code_examples(file_pattern, lang := NULL) AS TABLE
         include_content := true,
         include_filepath := true
     ) s,
-    LATERAL (SELECT UNNEST(md_extract_code_blocks(s.content))) cb
+    LATERAL (
+        SELECT u.language, u.code, u.line_number
+        FROM (SELECT UNNEST(md_extract_code_blocks(s.content)) AS u)
+    ) cb
     WHERE lang IS NULL OR cb.language = lang;
 
 -- doc_stats: Get statistics about markdown documentation files.

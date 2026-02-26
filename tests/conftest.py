@@ -11,64 +11,23 @@ DUCK_NEST_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SQL_DIR = os.path.join(DUCK_NEST_ROOT, "sql")
 CLAUDE_PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 
-
-@pytest.fixture
-def con():
-    """Fresh DuckDB connection for each test."""
-    conn = duckdb.connect(":memory:")
-    yield conn
-    conn.close()
-
-
-@pytest.fixture
-def ext_read_lines(con):
-    """Connection with read_lines loaded."""
-    con.execute("LOAD read_lines")
-    return con
-
-
-@pytest.fixture
-def ext_sitting_duck(con):
-    """Connection with sitting_duck loaded."""
-    con.execute("LOAD sitting_duck")
-    return con
-
-
-@pytest.fixture
-def ext_markdown(con):
-    """Connection with duckdb_markdown loaded."""
-    con.execute("LOAD markdown")
-    return con
-
-
-@pytest.fixture
-def ext_duck_tails(con):
-    """Connection with duck_tails loaded."""
-    con.execute("LOAD duck_tails")
-    return con
-
-
-@pytest.fixture
-def all_extensions(con):
-    """Connection with all extensions loaded."""
-    con.execute("LOAD read_lines")
-    con.execute("LOAD sitting_duck")
-    con.execute("LOAD markdown")
-    con.execute("LOAD duck_tails")
-    return con
+# Test data paths (the repo itself)
+SPEC_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/PRODUCT_SPEC.md")
+ANALYSIS_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/CONVERSATION_ANALYSIS.md")
+CONFTEST_PATH = os.path.join(DUCK_NEST_ROOT, "tests/conftest.py")
+REPO_PATH = DUCK_NEST_ROOT
 
 
 def load_sql(con, filename):
-    """Load a SQL macro file into the connection."""
+    """Load a SQL macro file into a DuckDB connection.
+
+    Strips comment-only lines before splitting on semicolons to avoid
+    parsing errors from semicolons inside comments.
+    """
     path = os.path.join(SQL_DIR, filename)
     with open(path) as f:
         sql = f.read()
-    # Strip comment-only lines before splitting on semicolons
-    lines = []
-    for line in sql.split("\n"):
-        stripped = line.strip()
-        if not stripped.startswith("--"):
-            lines.append(line)
+    lines = [l for l in sql.split("\n") if not l.strip().startswith("--")]
     cleaned = "\n".join(lines)
     for stmt in cleaned.split(";"):
         stmt = stmt.strip()
@@ -77,34 +36,60 @@ def load_sql(con, filename):
 
 
 @pytest.fixture
-def source_macros(ext_read_lines):
-    """Connection with read_lines + source macros loaded."""
-    load_sql(ext_read_lines, "source.sql")
-    return ext_read_lines
+def con():
+    """Fresh in-memory DuckDB connection."""
+    conn = duckdb.connect(":memory:")
+    yield conn
+    conn.close()
 
 
 @pytest.fixture
-def code_macros(ext_sitting_duck):
-    """Connection with sitting_duck + code macros loaded."""
-    load_sql(ext_sitting_duck, "code.sql")
-    return ext_sitting_duck
+def source_macros(con):
+    """Connection with read_lines extension + source macros."""
+    con.execute("LOAD read_lines")
+    load_sql(con, "source.sql")
+    return con
 
 
 @pytest.fixture
-def docs_macros(ext_markdown):
-    """Connection with duckdb_markdown + docs macros loaded."""
-    load_sql(ext_markdown, "docs.sql")
-    return ext_markdown
+def code_macros(con):
+    """Connection with sitting_duck extension + code macros."""
+    con.execute("LOAD sitting_duck")
+    load_sql(con, "code.sql")
+    return con
 
 
 @pytest.fixture
-def repo_macros(ext_duck_tails):
-    """Connection with duck_tails + repo macros loaded."""
-    load_sql(ext_duck_tails, "repo.sql")
-    return ext_duck_tails
+def docs_macros(con):
+    """Connection with markdown extension + docs macros."""
+    con.execute("LOAD markdown")
+    load_sql(con, "docs.sql")
+    return con
 
 
-# Paths to test data (the duck_nest repo itself)
-SPEC_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/PRODUCT_SPEC.md")
-ANALYSIS_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/CONVERSATION_ANALYSIS.md")
-CONFTEST_PATH = os.path.join(DUCK_NEST_ROOT, "tests/conftest.py")
+@pytest.fixture
+def repo_macros(con):
+    """Connection with duck_tails extension + repo macros."""
+    con.execute("LOAD duck_tails")
+    load_sql(con, "repo.sql")
+    return con
+
+
+@pytest.fixture
+def all_macros(con):
+    """Connection with ALL extensions and ALL macros loaded.
+
+    Load order matters: source.sql drops sitting_duck's conflicting
+    read_lines macro, so it must load after sitting_duck.
+    """
+    con.execute("LOAD read_lines")
+    con.execute("LOAD sitting_duck")
+    con.execute("LOAD markdown")
+    con.execute("LOAD duck_tails")
+    # sitting_duck's read_lines macro shadows the extension; drop it
+    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
+    load_sql(con, "source.sql")
+    load_sql(con, "code.sql")
+    load_sql(con, "docs.sql")
+    load_sql(con, "repo.sql")
+    return con
