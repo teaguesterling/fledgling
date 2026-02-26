@@ -1,6 +1,8 @@
--- conversations.sql: DuckDB schema for analyzing Claude Code conversation logs
+-- conversations.sql: DuckDB macros for analyzing Claude Code conversation logs
 --
--- Prerequisites: A `raw_conversations` table loaded from JSONL files.
+-- Prerequisites: A `raw_conversations` table must exist before loading this file.
+-- Use load_conversations() to create it, then load the rest of the macros.
+-- Tier 2+ macros reference other macros (deferred resolution at call time).
 -- All objects are CREATE OR REPLACE for idempotency.
 -- See docs/vision/CONVERSATION_SCHEMA_DESIGN.md for design details.
 
@@ -12,7 +14,7 @@ CREATE OR REPLACE MACRO load_conversations(path) AS TABLE
     );
 
 -- 2a. SESSIONS - One row per session with metadata
-CREATE OR REPLACE VIEW sessions AS
+CREATE OR REPLACE MACRO sessions() AS TABLE
     SELECT
         sessionId AS session_id,
         regexp_extract(_source_file, '.claude/projects/([^/]+)/', 1) AS project_dir,
@@ -35,7 +37,7 @@ CREATE OR REPLACE VIEW sessions AS
              regexp_extract(_source_file, '.claude/projects/([^/]+)/', 1);
 
 -- 2b. MESSAGES - Flattened user + assistant messages
-CREATE OR REPLACE VIEW messages AS
+CREATE OR REPLACE MACRO messages() AS TABLE
     SELECT
         r.uuid AS message_id,
         r.sessionId AS session_id,
@@ -63,8 +65,15 @@ CREATE OR REPLACE VIEW messages AS
 
 -- 2c. CONTENT BLOCKS - Unnested assistant message content
 -- Key pattern: LATERAL UNNEST(CAST(content AS JSON[])) turns JSON array into rows
--- Guard: json_type() = 'ARRAY' prevents CAST errors on string user content
-CREATE OR REPLACE VIEW content_blocks AS
+-- CTE filters first to prevent CAST errors on non-array content
+CREATE OR REPLACE MACRO content_blocks() AS TABLE
+    WITH array_messages AS (
+        SELECT uuid, sessionId, slug, timestamp, requestId, message, _source_file
+        FROM raw_conversations
+        WHERE type = 'assistant'
+          AND message.content IS NOT NULL
+          AND json_type(message.content) = 'ARRAY'
+    )
     SELECT
         r.uuid AS message_id,
         r.sessionId AS session_id,
@@ -79,14 +88,11 @@ CREATE OR REPLACE VIEW content_blocks AS
         b.block ->> 'id' AS tool_use_id,
         b.block -> 'input' AS tool_input,
         r._source_file AS source_file
-    FROM raw_conversations r,
-         LATERAL UNNEST(CAST(r.message.content AS JSON[])) AS b(block)
-    WHERE r.type = 'assistant'
-      AND r.message.content IS NOT NULL
-      AND json_type(r.message.content) = 'ARRAY';
+    FROM array_messages r,
+         LATERAL UNNEST(CAST(r.message.content AS JSON[])) AS b(block);
 
 -- 2d. TOOL CALLS - Extracted tool_use blocks with convenience columns
-CREATE OR REPLACE VIEW tool_calls AS
+CREATE OR REPLACE MACRO tool_calls() AS TABLE
     SELECT
         cb.tool_use_id, cb.message_id, cb.session_id,
         cb.slug, cb.model, cb.created_at, cb.tool_name,
@@ -95,12 +101,19 @@ CREATE OR REPLACE VIEW tool_calls AS
         COALESCE(cb.tool_input ->> 'file_path', cb.tool_input ->> 'path') AS file_path,
         cb.tool_input ->> 'pattern' AS grep_pattern,
         cb.source_file
-    FROM content_blocks cb
+    FROM content_blocks() cb
     WHERE cb.block_type = 'tool_use';
 
 -- 2e. TOOL RESULTS - Matched tool_result blocks from user messages
 -- Join: tool_calls.tool_use_id = tool_results.tool_use_id
-CREATE OR REPLACE VIEW tool_results AS
+CREATE OR REPLACE MACRO tool_results() AS TABLE
+    WITH user_array_messages AS (
+        SELECT uuid, sessionId, timestamp, message, _source_file
+        FROM raw_conversations
+        WHERE type = 'user'
+          AND message.content IS NOT NULL
+          AND json_type(message.content) = 'ARRAY'
+    )
     SELECT
         r.uuid AS message_id,
         r.sessionId AS session_id,
@@ -109,16 +122,13 @@ CREATE OR REPLACE VIEW tool_results AS
         b.block ->> 'content' AS result_content,
         CAST(b.block ->> 'is_error' AS BOOLEAN) AS is_error,
         r._source_file AS source_file
-    FROM raw_conversations r,
+    FROM user_array_messages r,
          LATERAL UNNEST(CAST(r.message.content AS JSON[])) AS b(block)
-    WHERE r.type = 'user'
-      AND r.message.content IS NOT NULL
-      AND json_type(r.message.content) = 'ARRAY'
-      AND b.block ->> 'type' = 'tool_result';
+    WHERE b.block ->> 'type' = 'tool_result';
 
 -- 2f. TOKEN USAGE - Per-message token consumption with cache metrics
 -- WARNING: Deduplicate on request_id for accurate totals (chunks share usage)
-CREATE OR REPLACE VIEW token_usage AS
+CREATE OR REPLACE MACRO token_usage() AS TABLE
     SELECT
         m.message_id, m.session_id, m.request_id,
         m.model, m.created_at, m.slug,
@@ -136,24 +146,24 @@ CREATE OR REPLACE VIEW token_usage AS
                      + COALESCE(m.cache_read_tokens,0))
              ELSE NULL END AS cache_hit_rate,
         m.source_file
-    FROM messages m
+    FROM messages() m
     WHERE m.role = 'assistant' AND m.input_tokens IS NOT NULL;
 
 -- 3a. TOOL FREQUENCY - Tool usage counts by project/session/tool
-CREATE OR REPLACE VIEW tool_frequency AS
+CREATE OR REPLACE MACRO tool_frequency() AS TABLE
     SELECT
         regexp_extract(tc.source_file, '.claude/projects/([^/]+)/', 1) AS project_dir,
         tc.session_id, tc.slug, tc.tool_name,
         count(*) AS call_count,
         min(tc.created_at) AS first_used,
         max(tc.created_at) AS last_used
-    FROM tool_calls tc GROUP BY ALL;
+    FROM tool_calls() tc GROUP BY ALL;
 
 -- 3b. BASH COMMANDS - Parsed bash command analysis with categories
 -- Categories: git_read, git_write, github_cli, build_tools, runtime_exec,
 --   file_search, file_read, filesystem, text_processing, network, other
 -- replaceable_by: duck_tails, sitting_duck, read_lines, duckdb_sql
-CREATE OR REPLACE VIEW bash_commands AS
+CREATE OR REPLACE MACRO bash_commands() AS TABLE
     SELECT
         tc.tool_use_id, tc.message_id, tc.session_id,
         tc.slug, tc.created_at,
@@ -240,11 +250,11 @@ CREATE OR REPLACE VIEW bash_commands AS
             ELSE NULL
         END AS replaceable_by,
         tc.source_file
-    FROM tool_calls tc
+    FROM tool_calls() tc
     WHERE tc.tool_name = 'Bash' AND tc.bash_command IS NOT NULL;
 
 -- 3c. SESSION SUMMARY - Dashboard view with all stats per session
-CREATE OR REPLACE VIEW session_summary AS
+CREATE OR REPLACE MACRO session_summary() AS TABLE
     SELECT
         s.session_id, s.project_dir, s.slug, s.version,
         s.git_branch, s.started_at, s.ended_at, s.duration,
@@ -258,12 +268,12 @@ CREATE OR REPLACE VIEW session_summary AS
         tk.avg_cache_hit_rate,
         COALESCE(bc.bash_calls, 0) AS bash_calls,
         COALESCE(bc.replaceable_calls, 0) AS bash_replaceable_calls
-    FROM sessions s
+    FROM sessions() s
     LEFT JOIN (
         SELECT session_id, count(*) AS total_tool_calls,
                count(DISTINCT tool_name) AS distinct_tools,
                mode(tool_name) AS top_tool
-        FROM tool_calls GROUP BY session_id
+        FROM tool_calls() GROUP BY session_id
     ) tc ON tc.session_id = s.session_id
     LEFT JOIN (
         SELECT session_id, sum(input_tokens) AS total_input,
@@ -273,18 +283,18 @@ CREATE OR REPLACE VIEW session_summary AS
         FROM (
             SELECT DISTINCT ON (request_id) session_id, request_id,
                 input_tokens, output_tokens, total_tokens, cache_hit_rate
-            FROM token_usage
+            FROM token_usage()
             ORDER BY request_id, output_tokens DESC NULLS LAST
         ) GROUP BY session_id
     ) tk ON tk.session_id = s.session_id
     LEFT JOIN (
         SELECT session_id, count(*) AS bash_calls,
                count(*) FILTER (WHERE replaceable_by IS NOT NULL) AS replaceable_calls
-        FROM bash_commands GROUP BY session_id
+        FROM bash_commands() GROUP BY session_id
     ) bc ON bc.session_id = s.session_id;
 
 -- 3d. MODEL USAGE - Token consumption by model
-CREATE OR REPLACE VIEW model_usage AS
+CREATE OR REPLACE MACRO model_usage() AS TABLE
     SELECT model,
         count(DISTINCT session_id) AS sessions,
         count(DISTINCT request_id) AS api_calls,
@@ -295,11 +305,13 @@ CREATE OR REPLACE VIEW model_usage AS
     FROM (
         SELECT DISTINCT ON (request_id) session_id, request_id, model,
             input_tokens, output_tokens, total_tokens, cache_hit_rate
-        FROM token_usage WHERE model IS NOT NULL
+        FROM token_usage() WHERE model IS NOT NULL
         ORDER BY request_id, output_tokens DESC NULLS LAST
     ) GROUP BY model ORDER BY total_tokens DESC;
 
 -- 4a. SEARCH MESSAGES - Full-text search across conversation content
+-- NOTE: Uses json_extract_string() instead of ->> in UNION ALL to avoid
+-- a DuckDB macro parsing issue with the ->> operator in UNION context.
 CREATE OR REPLACE MACRO search_messages(search_term) AS TABLE
     SELECT uuid AS message_id, sessionId AS session_id, slug,
            'user' AS role, CAST(message.content AS VARCHAR) AS content,
@@ -310,19 +322,20 @@ CREATE OR REPLACE MACRO search_messages(search_term) AS TABLE
       AND json_type(message.content) != 'ARRAY'
     UNION ALL
     SELECT r.uuid, r.sessionId, r.slug,
-           'assistant', b.block ->> 'text', r.timestamp
-    FROM raw_conversations r,
+           'assistant', json_extract_string(b.block, '$.text'), r.timestamp
+    FROM (SELECT uuid, sessionId, slug, timestamp, message
+          FROM raw_conversations
+          WHERE type = 'assistant'
+            AND message.content IS NOT NULL
+            AND json_type(message.content) = 'ARRAY') r,
          LATERAL UNNEST(CAST(r.message.content AS JSON[])) AS b(block)
-    WHERE r.type = 'assistant'
-      AND r.message.content IS NOT NULL
-      AND json_type(r.message.content) = 'ARRAY'
-      AND b.block ->> 'type' = 'text'
-      AND b.block ->> 'text' ILIKE '%' || search_term || '%';
+    WHERE json_extract_string(b.block, '$.type') = 'text'
+      AND json_extract_string(b.block, '$.text') ILIKE '%' || search_term || '%';
 
 -- 4b. SEARCH TOOL INPUTS - Search within tool call parameters
 CREATE OR REPLACE MACRO search_tool_inputs(search_term) AS TABLE
     SELECT tc.tool_use_id, tc.session_id, tc.slug, tc.tool_name,
            tc.bash_command, tc.file_path, tc.grep_pattern,
            CAST(tc.input AS VARCHAR) AS input_text, tc.created_at
-    FROM tool_calls tc
+    FROM tool_calls() tc
     WHERE CAST(tc.input AS VARCHAR) ILIKE '%' || search_term || '%';

@@ -3,6 +3,7 @@
 All tests use the source_sextant repo itself as test data (dog-fooding).
 """
 
+import json
 import os
 import pytest
 import duckdb
@@ -92,4 +93,154 @@ def all_macros(con):
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    return con
+
+
+# -- Synthetic conversation data for conversation macro tests --
+
+CONVERSATION_RECORDS = [
+    # Session 1, record 1: user message with string content
+    {
+        "uuid": "u1", "parentUuid": None, "sessionId": "sess-001",
+        "type": "user",
+        "message": {"role": "user", "content": "Help me fix the bug in auth"},
+        "timestamp": "2025-01-15T10:00:00Z",
+        "requestId": None, "slug": "fix-auth", "version": "1.0.0",
+        "gitBranch": "main", "cwd": "/projects/myapp",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 1, record 2: assistant with text + tool_use (Bash: git status)
+    {
+        "uuid": "u2", "parentUuid": "u1", "sessionId": "sess-001",
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Let me look at the code"},
+                {"type": "tool_use", "id": "tu_001", "name": "Bash",
+                 "input": {"command": "git status"}},
+            ],
+            "model": "claude-sonnet-4-20250514",
+            "id": "msg_001", "stop_reason": "tool_use",
+            "usage": {
+                "input_tokens": 1000, "output_tokens": 200,
+                "cache_read_input_tokens": 500,
+            },
+        },
+        "timestamp": "2025-01-15T10:00:05Z",
+        "requestId": "req_001", "slug": "fix-auth", "version": "1.0.0",
+        "gitBranch": "main", "cwd": "/projects/myapp",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 1, record 3: user with tool_result array content
+    {
+        "uuid": "u3", "parentUuid": "u2", "sessionId": "sess-001",
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "tu_001",
+                 "content": "On branch main\nnothing to commit"},
+            ],
+        },
+        "timestamp": "2025-01-15T10:00:10Z",
+        "requestId": None, "slug": "fix-auth", "version": "1.0.0",
+        "gitBranch": "main", "cwd": "/projects/myapp",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 1, record 4: assistant with text + tool_use (Read)
+    {
+        "uuid": "u4", "parentUuid": "u3", "sessionId": "sess-001",
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "I see the issue in the auth module"},
+                {"type": "tool_use", "id": "tu_002", "name": "Read",
+                 "input": {"file_path": "/src/auth.py"}},
+            ],
+            "model": "claude-sonnet-4-20250514",
+            "id": "msg_002", "stop_reason": "tool_use",
+            "usage": {
+                "input_tokens": 1200, "output_tokens": 300,
+                "cache_read_input_tokens": 600,
+            },
+        },
+        "timestamp": "2025-01-15T10:00:15Z",
+        "requestId": "req_002", "slug": "fix-auth", "version": "1.0.0",
+        "gitBranch": "main", "cwd": "/projects/myapp",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 1, record 5: progress event (no message body)
+    {
+        "uuid": "u5", "parentUuid": "u4", "sessionId": "sess-001",
+        "type": "progress",
+        "timestamp": "2025-01-15T10:00:20Z",
+        "requestId": None, "slug": "fix-auth", "version": "1.0.0",
+        "gitBranch": "main", "cwd": "/projects/myapp",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 2, record 6: user message with string content
+    {
+        "uuid": "u6", "parentUuid": None, "sessionId": "sess-002",
+        "type": "user",
+        "message": {"role": "user", "content": "Show me the project files"},
+        "timestamp": "2025-01-15T11:00:00Z",
+        "requestId": None, "slug": "explore", "version": "1.0.0",
+        "gitBranch": "dev", "cwd": "/projects/other",
+        "isSidechain": False, "isMeta": False,
+    },
+    # Session 2, record 7: assistant with tool_use (Bash: cat README.md)
+    {
+        "uuid": "u7", "parentUuid": "u6", "sessionId": "sess-002",
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "tu_003", "name": "Bash",
+                 "input": {"command": "cat README.md"}},
+            ],
+            "model": "claude-haiku-4-20250414",
+            "id": "msg_003", "stop_reason": "tool_use",
+            "usage": {
+                "input_tokens": 500, "output_tokens": 100,
+                "cache_creation_input_tokens": 200,
+            },
+        },
+        "timestamp": "2025-01-15T11:00:05Z",
+        "requestId": "req_003", "slug": "explore", "version": "1.0.0",
+        "gitBranch": "dev", "cwd": "/projects/other",
+        "isSidechain": False, "isMeta": False,
+    },
+]
+
+
+@pytest.fixture
+def conversation_macros(con, tmp_path):
+    """Connection with conversation macros + synthetic JSONL test data.
+
+    Writes JSONL under a .claude/projects/test-project/ directory so the
+    project_dir regex in sessions() can extract "test-project".
+    """
+    project_dir = tmp_path / ".claude" / "projects" / "test-project"
+    project_dir.mkdir(parents=True)
+    jsonl_path = project_dir / "conversations.jsonl"
+
+    with open(jsonl_path, "w") as f:
+        for record in CONVERSATION_RECORDS:
+            f.write(json.dumps(record) + "\n")
+
+    # load_conversations() must be defined first, then raw_conversations
+    # must exist before the remaining macros (which reference it directly).
+    con.execute(f"""
+        CREATE OR REPLACE MACRO load_conversations(path) AS TABLE
+            SELECT *, filename AS _source_file
+            FROM read_json_auto(
+                path, union_by_name=true,
+                maximum_object_size=33554432, filename=true
+            );
+        CREATE TABLE raw_conversations AS
+        SELECT * FROM load_conversations('{jsonl_path}')
+    """)
+    load_sql(con, "conversations.sql")
     return con
