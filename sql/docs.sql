@@ -1,4 +1,4 @@
--- Duck Nest: Documentation Intelligence Macros (duckdb_markdown)
+-- Source Sextant: Documentation Intelligence Macros (duckdb_markdown)
 --
 -- Structured access to markdown documentation. The documentation
 -- counterpart to sitting_duck's source code analysis.

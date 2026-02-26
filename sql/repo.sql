@@ -1,4 +1,4 @@
--- Duck Nest: Repository Intelligence Macros (duck_tails)
+-- Source Sextant: Repository Intelligence Macros (duck_tails)
 --
 -- Structured access to git repository state. Replaces git CLI
 -- commands with composable, queryable results.

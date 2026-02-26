@@ -1,4 +1,4 @@
--- Duck Nest: Source Retrieval Macros (read_lines)
+-- Source Sextant: Source Retrieval Macros (read_lines)
 --
 -- Thin wrappers around read_lines that provide convenient interfaces
 -- for the common file-reading patterns agents use most.

@@ -1,0 +1,54 @@
+site_name: Source Sextant
+site_description: MCP tools that help AI agents get their bearings in a codebase
+site_url: https://source-sextant.readthedocs.io
+repo_url: https://github.com/teaguesterling/source-sextant
+repo_name: teaguesterling/source-sextant
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - tables
+  - admonitions
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Macro Reference:
+      - Source Retrieval: macros/source.md
+      - Code Intelligence: macros/code.md
+      - Documentation: macros/docs.md
+      - Repository: macros/repo.md
+      - Conversations: macros/conversations.md
+  - Vision:
+      - Product Spec: vision/PRODUCT_SPEC.md
+      - Conversation Analysis: vision/CONVERSATION_ANALYSIS.md
+      - Schema Design: vision/CONVERSATION_SCHEMA_DESIGN.md
+  - Development:
+      - Next Steps: planning/NEXT_STEPS.md

@@ -1,21 +1,21 @@
-"""Shared fixtures for duck_nest macro tests.
+"""Shared fixtures for source_sextant macro tests.
 
-All tests use the duck_nest repo itself as test data (dog-fooding).
+All tests use the source_sextant repo itself as test data (dog-fooding).
 """
 
 import os
 import pytest
 import duckdb
 
-DUCK_NEST_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SQL_DIR = os.path.join(DUCK_NEST_ROOT, "sql")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SQL_DIR = os.path.join(PROJECT_ROOT, "sql")
 CLAUDE_PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 
 # Test data paths (the repo itself)
-SPEC_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/PRODUCT_SPEC.md")
-ANALYSIS_PATH = os.path.join(DUCK_NEST_ROOT, "docs/vision/CONVERSATION_ANALYSIS.md")
-CONFTEST_PATH = os.path.join(DUCK_NEST_ROOT, "tests/conftest.py")
-REPO_PATH = DUCK_NEST_ROOT
+SPEC_PATH = os.path.join(PROJECT_ROOT, "docs/vision/PRODUCT_SPEC.md")
+ANALYSIS_PATH = os.path.join(PROJECT_ROOT, "docs/vision/CONVERSATION_ANALYSIS.md")
+CONFTEST_PATH = os.path.join(PROJECT_ROOT, "tests/conftest.py")
+REPO_PATH = PROJECT_ROOT
 
 
 def load_sql(con, filename):

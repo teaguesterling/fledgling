@@ -1,7 +1,7 @@
 """Tests for source retrieval macros (read_lines tier)."""
 
 import pytest
-from conftest import SPEC_PATH, CONFTEST_PATH, DUCK_NEST_ROOT
+from conftest import SPEC_PATH, CONFTEST_PATH, PROJECT_ROOT
 
 
 class TestReadSource:
@@ -31,7 +31,7 @@ class TestReadSource:
         rows = source_macros.execute(
             "SELECT content FROM read_source(?, '1')", [SPEC_PATH]
         ).fetchall()
-        assert "Duck Nest" in rows[0][0]
+        assert "Source Sextant" in rows[0][0]
 
     def test_context_lines(self, source_macros):
         rows = source_macros.execute(
@@ -54,7 +54,7 @@ class TestReadSource:
 
 class TestReadSourceBatch:
     def test_includes_file_path(self, source_macros):
-        pattern = DUCK_NEST_ROOT + "/docs/vision/*.md"
+        pattern = PROJECT_ROOT + "/docs/vision/*.md"
         desc = source_macros.execute(
             "DESCRIBE SELECT * FROM read_source_batch(?)", [pattern]
         ).fetchall()
@@ -62,7 +62,7 @@ class TestReadSourceBatch:
         assert "file_path" in col_names
 
     def test_reads_multiple_files(self, source_macros):
-        pattern = DUCK_NEST_ROOT + "/docs/vision/*.md"
+        pattern = PROJECT_ROOT + "/docs/vision/*.md"
         paths = source_macros.execute(
             "SELECT DISTINCT file_path FROM read_source_batch(?)", [pattern]
         ).fetchall()
@@ -103,7 +103,7 @@ class TestFileLineCount:
         assert rows[0][1] > 100  # line_count
 
     def test_glob_pattern(self, source_macros):
-        pattern = DUCK_NEST_ROOT + "/docs/vision/*.md"
+        pattern = PROJECT_ROOT + "/docs/vision/*.md"
         rows = source_macros.execute(
             "SELECT * FROM file_line_count(?)", [pattern]
         ).fetchall()

@@ -1,17 +1,17 @@
-# Duck Nest: Product Specification
+# Source Sextant: Product Specification
 
 **Version**: 0.1 (Draft)
 **Status**: Vision / Pre-implementation
 
-## What Is Duck Nest?
+## What Is Source Sextant?
 
-Duck Nest is a DuckDB-powered MCP server that unifies development intelligence tools
+Source Sextant is a DuckDB-powered MCP server that unifies development intelligence tools
 into a single queryable surface. It brings together existing DuckDB extensions —
 `sitting_duck` (code semantics), `duck_tails` (git state), `read_lines` (file retrieval),
 `duckdb_markdown` (document structure) — and adds conversation analysis capabilities,
 all exposed as purpose-built MCP tools via `duckdb_mcp`.
 
-The name: it's where all the ducks roost together.
+The name: a sextant helps navigators get their bearings — this tool helps AI agents get their bearings in source code.
 
 ## Problem Statement
 
@@ -35,16 +35,16 @@ each problem with structured, queryable results.
 
 ## Architecture
 
-Duck Nest is **not a new codebase** in the traditional sense. It is:
+Source Sextant is **not a new codebase** in the traditional sense. It is:
 
-1. A **DuckDB init script** (`init-duck-nest.sql`) that loads extensions, defines
+1. A **DuckDB init script** (`init-source-sextant.sql`) that loads extensions, defines
    macros, publishes MCP tools, and starts the server
 2. A set of **SQL macro files** organized by concern
 3. **Configuration** for Claude Code (`settings.json` / `.mcp.json` integration)
 
 ```
-duck_nest/
-  init-duck-nest.sql          # Entry point: load, configure, publish, serve
+source_sextant/
+  init-source-sextant.sql          # Entry point: load, configure, publish, serve
   sql/
     source.sql                # read_lines macros + tools
     code.sql                  # sitting_duck macros + tools
@@ -71,7 +71,7 @@ duck_nest/
 ### How It Works
 
 ```sql
--- init-duck-nest.sql (conceptual)
+-- init-source-sextant.sql (conceptual)
 LOAD duckdb_mcp;
 LOAD read_lines;
 LOAD sitting_duck;
@@ -97,9 +97,9 @@ Claude Code configuration:
 ```json
 {
   "mcpServers": {
-    "duck_nest": {
+    "source_sextant": {
       "command": "duckdb",
-      "args": ["-init", "/path/to/duck_nest/init-duck-nest.sql"]
+      "args": ["-init", "/path/to/source_sextant/init-source-sextant.sql"]
     }
   }
 }
@@ -394,7 +394,7 @@ that the agent can process without parsing.
 
 ### 4. Read-only by default
 
-Duck Nest is a *retrieval* server. It reads files, parses code, queries git
+Source Sextant is a *retrieval* server. It reads files, parses code, queries git
 history, and analyzes conversations. It does not modify anything.
 `enable_execute_tool` is `false`. Git write operations (commit, push) are
 explicitly out of scope — they belong in a separate "safe-git" server with
@@ -425,20 +425,20 @@ The server should work with sensible defaults when launched from a project
 directory. Extensions auto-detect languages, git discovers the repo,
 conversation logs are found from `~/.claude/`.
 
-## What Duck Nest Is NOT
+## What Source Sextant Is NOT
 
 - **Not a replacement for aidr**: aidr is a persistent analytical workspace with
-  cognitive tracking. Duck Nest is a read-only retrieval layer.
+  cognitive tracking. Source Sextant is a read-only retrieval layer.
 - **Not a replacement for blq**: blq captures and analyzes build/test output with
-  duck_hunt parsing. Duck Nest doesn't run commands.
+  duck_hunt parsing. Source Sextant doesn't run commands.
 - **Not a git write tool**: No commits, no pushes, no branch operations. That's
   a separate concern with different security requirements.
-- **Not a new extension**: Duck Nest composes existing extensions. It adds SQL
+- **Not a new extension**: Source Sextant composes existing extensions. It adds SQL
   macros and MCP tool definitions, not C++ code.
 
 ## Impact on settings.json
 
-With Duck Nest operational, these bash whitelist entries become unnecessary:
+With Source Sextant operational, these bash whitelist entries become unnecessary:
 
 ```
 REMOVE (replaced by read_source / read_context):
@@ -454,7 +454,7 @@ REMOVE (replaced by DuckDB SQL via query tool):
   Bash(wc *), Bash(sort *), Bash(uniq *), Bash(cut *), Bash(tr *),
   Bash(awk *), Bash(sed *)
 
-KEEP (no Duck Nest equivalent):
+KEEP (no Source Sextant equivalent):
   Bash(ls *), Bash(mkdir *), Bash(tree *), Bash(stat *), Bash(file *)
   Bash(realpath *), Bash(basename *), Bash(dirname *)
   Bash(diff *), Bash(echo *), Bash(printf *), Bash(pwd), Bash(which *)
@@ -473,7 +473,7 @@ Net reduction: ~20 bash whitelist entries replaced by structured MCP tools.
 2. **Conversation log format**: What's the exact schema of the `.jsonl` files in
    `~/.claude/projects/`? Need to explore before finalizing conversation tools.
 
-3. **Per-project vs global**: Should Duck Nest run as a global MCP server (one
+3. **Per-project vs global**: Should Source Sextant run as a global MCP server (one
    instance serving all projects) or per-project? Git and code analysis are
    inherently project-scoped, but conversations span projects.
 
@@ -486,7 +486,7 @@ Net reduction: ~20 bash whitelist entries replaced by structured MCP tools.
 
 ## Success Criteria
 
-Duck Nest is successful when:
+Source Sextant is successful when:
 
 - An agent can find "all Python function definitions containing 'parse'" without
   a single bash command

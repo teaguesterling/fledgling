@@ -1,7 +1,7 @@
 """Tests for documentation intelligence macros (duckdb_markdown tier)."""
 
 import pytest
-from conftest import SPEC_PATH, ANALYSIS_PATH, DUCK_NEST_ROOT
+from conftest import SPEC_PATH, ANALYSIS_PATH, PROJECT_ROOT
 
 
 class TestDocOutline:
@@ -41,10 +41,10 @@ class TestDocOutline:
         ).fetchall()
         ids = [r[0] for r in rows]
         assert "architecture" in ids
-        assert "what-is-duck-nest" in ids
+        assert "what-is-source-sextant" in ids
 
     def test_multiple_files_via_glob(self, docs_macros):
-        pattern = DUCK_NEST_ROOT + "/docs/vision/*.md"
+        pattern = PROJECT_ROOT + "/docs/vision/*.md"
         paths = docs_macros.execute(
             "SELECT DISTINCT file_path FROM doc_outline(?)", [pattern]
         ).fetchall()
@@ -149,7 +149,7 @@ class TestDocStats:
         assert rows[0][0] > 100
 
     def test_ordered_by_word_count(self, docs_macros):
-        pattern = DUCK_NEST_ROOT + "/docs/vision/*.md"
+        pattern = PROJECT_ROOT + "/docs/vision/*.md"
         rows = docs_macros.execute(
             "SELECT word_count FROM doc_stats(?)", [pattern]
         ).fetchall()

@@ -1,7 +1,7 @@
 """Tests for code intelligence macros (sitting_duck tier)."""
 
 import pytest
-from conftest import CONFTEST_PATH, DUCK_NEST_ROOT
+from conftest import CONFTEST_PATH, PROJECT_ROOT
 
 
 class TestFindDefinitions:

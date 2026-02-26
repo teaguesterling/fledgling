@@ -1,4 +1,4 @@
-# Duck Nest: Next Steps
+# Source Sextant: Next Steps
 
 **Last session**: 2026-02-26
 **State**: 6 commits, 63 passing tests, 4 macro tiers working, conversation schema drafted
@@ -6,7 +6,7 @@
 ## What Exists
 
 ```
-duck_nest/
+source_sextant/
   sql/
     source.sql          ✅ 4 macros, 13 tests passing
     code.sql            ✅ 4 macros, 13 tests passing
@@ -56,7 +56,7 @@ to fix `conversations.sql` alongside writing tests.
 
 Once all macros are tested, wire them up as an actual MCP server.
 
-### 2a. Write `init-duck-nest.sql`
+### 2a. Write `init-source-sextant.sql`
 
 The entry point that loads everything and starts the server:
 
@@ -72,7 +72,7 @@ DROP MACRO TABLE IF EXISTS read_lines;
 
 -- Load macros
 -- (Need to figure out how to .read SQL files from init script,
--- or inline all macros into init-duck-nest.sql)
+-- or inline all macros into init-source-sextant.sql)
 
 -- Publish MCP tools via mcp_publish_tool()
 -- ... one call per tool ...
@@ -116,9 +116,9 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "mcpServers": {
-    "duck_nest": {
+    "source_sextant": {
       "command": "duckdb",
-      "args": ["-init", "/path/to/duck_nest/init-duck-nest.sql"]
+      "args": ["-init", "/path/to/source_sextant/init-source-sextant.sql"]
     }
   }
 }
@@ -134,7 +134,7 @@ test via Claude Code with the server configured.
 ## Phase 3: Polish and Iterate
 
 ### Trim settings.json bash whitelist
-Once duck_nest is running as MCP, start removing bash entries that are
+Once source_sextant is running as MCP, start removing bash entries that are
 now covered by MCP tools. The conversation analysis showed which ones:
 - `cat`, `head`, `tail` → `read_source`
 - `grep`, `find` → `find_definitions` / Grep tool
@@ -147,7 +147,7 @@ compelling: 849 MB of JSONL, 267K records, tool usage patterns that
 directly inform tooling decisions. Good candidate for a post.
 
 ### Per-project configuration
-Currently duck_nest is global. Consider how project-specific tools
+Currently source_sextant is global. Consider how project-specific tools
 would work — e.g., project-specific sitting_duck queries, custom
 doc_outline filters, conversation scoping.
 
@@ -165,7 +165,7 @@ doc_outline filters, conversation scoping.
 
 ## Future: Safe Git MCP Server (Separate Project)
 
-Out of scope for duck_nest (which is read-only), but the conversation
+Out of scope for source_sextant (which is read-only), but the conversation
 analysis showed 2,810 git write operations (16.5% of all bash). A
 separate server with safety guardrails:
 
@@ -173,5 +173,5 @@ separate server with safety guardrails:
 - `safe_push(branch)` — refuses force-push, refuses main/master
 - `safe_add(files)` — stage specific files only
 
-This is a different security profile from duck_nest and should remain
+This is a different security profile from source_sextant and should remain
 a separate server.

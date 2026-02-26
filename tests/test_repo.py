@@ -127,7 +127,7 @@ class TestFileAtVersion:
             "SELECT content FROM file_at_version('docs/vision/PRODUCT_SPEC.md', 'HEAD', ?)",
             [REPO_PATH],
         ).fetchall()
-        assert "Duck Nest" in rows[0][0]
+        assert "Source Sextant" in rows[0][0]
 
     def test_file_columns(self, repo_macros):
         desc = repo_macros.execute(
