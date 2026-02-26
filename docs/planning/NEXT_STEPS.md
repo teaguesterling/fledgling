@@ -1,12 +1,12 @@
 # Source Sextant: Next Steps
 
 **Last session**: 2026-02-26
-**State**: 6 commits, 63 passing tests, 4 macro tiers working, conversation schema drafted
+**State**: 8 commits, 63 passing tests, 4 macro tiers working, conversation schema drafted
 
 ## What Exists
 
 ```
-source_sextant/
+source-sextant/
   sql/
     source.sql          ✅ 4 macros, 13 tests passing
     code.sql            ✅ 4 macros, 13 tests passing
@@ -20,14 +20,38 @@ source_sextant/
     test_docs.py        ✅ 16 tests
     test_repo.py        ✅ 18 tests (includes cross-tier composition)
   docs/
+    index.md                    Docs landing page
+    getting-started.md          Installation and usage guide
+    macros/                     Macro reference (all 5 tiers)
     vision/
-      PRODUCT_SPEC.md             5-tier architecture, tool designs
-      CONVERSATION_ANALYSIS.md    DuckDB analysis of 270 JSONL files
+      PRODUCT_SPEC.md           5-tier architecture, tool designs
+      CONVERSATION_ANALYSIS.md  DuckDB analysis of 270 JSONL files
       CONVERSATION_SCHEMA_DESIGN.md  Schema design doc + blog outline
+    planning/
+      NEXT_STEPS.md             This file
+  pyproject.toml        ✅ Project metadata, dependency groups
+  README.md             ✅ Project description and quick example
+  mkdocs.yml            ✅ mkdocs-material config
+  .readthedocs.yaml     ✅ ReadTheDocs build config
 ```
 
 All 5 extensions load from DuckDB community on v1.4.4:
 `read_lines`, `sitting_duck`, `markdown`, `duck_tails`, `duckdb_mcp`
+
+## Completed
+
+### Project rename (2026-02-26)
+Renamed from `duck_nest` to `source-sextant`. Rationale: this is a tool
+that *uses* DuckDB extensions, not a DuckDB extension itself. The `duck_*`
+prefix belongs to the extension ecosystem; source-sextant belongs alongside
+`blq` and `aidr` as an independent tool. "Sextant" = navigation instrument;
+"source" = source code, source of truth.
+
+### Documentation infrastructure (2026-02-26)
+- ReadTheDocs setup with mkdocs-material
+- Macro reference pages for all 5 tiers
+- Getting started guide
+- pyproject.toml with dependency groups (test, docs)
 
 ## Immediate Next: Conversation Tier Tests
 
