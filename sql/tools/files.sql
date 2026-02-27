@@ -60,15 +60,23 @@ SELECT mcp_publish_tool(
 
 -- ReadAsTable: Read a data file as a structured table.
 -- Uses DuckDB auto-detection for CSV, JSON, Parquet, etc.
+--
 -- NOTE: Uses FROM $file_path directly (DuckDB string replacement scan)
 -- instead of query_table() to avoid Python namespace collisions
 -- (e.g. `import json` shadows .json file detection).
+--
+-- Path resolution limitation: DuckDB's FROM replacement scan requires
+-- a string literal, so we cannot wrap $file_path in a CASE expression
+-- for sextant_root resolution like the other tools do. In production,
+-- the init script sets file_search_path to the project root, and
+-- allowed_directories enforces sandboxing. MCP clients should pass
+-- absolute paths for reliable behavior.
 SELECT mcp_publish_tool(
     'ReadAsTable',
-    'Read a data file (CSV, JSON, Parquet, etc.) as a structured table using DuckDB auto-detection. Returns up to limit rows.',
+    'Read a data file (CSV, JSON, Parquet, etc.) as a structured table using DuckDB auto-detection. Returns up to limit rows. Use absolute paths.',
     'SELECT * FROM $file_path'
     || ' LIMIT COALESCE(TRY_CAST(NULLIF($limit, ''null'') AS INT), 100)',
-    '{"file_path": {"type": "string", "description": "Path to the data file (CSV, JSON, Parquet, etc.)"}, "limit": {"type": "string", "description": "Maximum number of rows to return (default: 100)"}}',
+    '{"file_path": {"type": "string", "description": "Absolute path to the data file (CSV, JSON, Parquet, etc.)"}, "limit": {"type": "string", "description": "Maximum number of rows to return (default: 100)"}}',
     '["file_path"]',
     'markdown'
 );

@@ -1,6 +1,6 @@
 # P2-001: Files Tools (ListFiles, ReadLines, ReadAsTable)
 
-**Status:** Not started
+**Status:** Implemented
 **Depends on:** None (can be implemented first)
 **Estimated scope:** New macros + tool publications
 
@@ -42,60 +42,55 @@ resolves against the repo root. These do NOT need `resolve()`.
 
 ## New/Updated Macros
 
-### list_files(pattern, commit)
+### list_files(pattern)
 
-Filesystem mode (commit is NULL): wrap `glob()` to list matching files.
-Git mode (commit provided): query `git_tree()` filtered by `file_path LIKE pattern`.
+Filesystem only: wraps `glob()` to list matching files. Git mode dispatch
+is handled by the tool template (see below) because `git_tree()` requires
+`duck_tails`, and `source.sql` must stay extension-independent so
+`test_source.py` can test it with only `read_lines` loaded.
 
 ```sql
-CREATE OR REPLACE MACRO list_files(pattern, commit := NULL) AS TABLE
-    SELECT * FROM (
-        SELECT file_path
-        FROM glob(pattern)
-        WHERE commit IS NULL
-        UNION ALL
-        SELECT file_path
-        FROM git_tree('.', commit)
-        WHERE commit IS NOT NULL
-          AND file_path LIKE pattern
-    )
+CREATE OR REPLACE MACRO list_files(pattern) AS TABLE
+    SELECT file AS file_path
+    FROM glob(pattern)
     ORDER BY file_path;
 ```
 
 Note: glob uses shell syntax (`*.sql`), git mode uses SQL LIKE (`%.sql`).
-The tool description must document this difference.
+The tool template handles git dispatch via UNION ALL with WHERE guards.
 
-### read_source — add match and commit params
+### read_source — add match param
 
-Extend existing macro. Existing calls (without match/commit) must still work.
+Extend existing macro with `match` filter. Existing calls still work.
+`commit` param is NOT in the macro (would require `duck_tails` dependency);
+git dispatch is handled by the tool template instead.
 
 ```sql
 CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0,
-                                     match := NULL, commit := NULL) AS TABLE
+                                     match := NULL) AS TABLE
     SELECT line_number, content
-    FROM read_lines(
-        CASE WHEN commit IS NULL THEN file_path
-             ELSE git_uri('.', file_path, commit)
-        END,
-        lines, context := ctx
-    )
+    FROM read_lines(file_path, lines, context := ctx)
     WHERE match IS NULL OR content ILIKE '%' || match || '%';
 ```
 
-**Risk:** `read_lines()` may not support `git://` URIs. Fallback: use
-`git_read()` + `string_split()` for commit mode.
+**Resolved risk:** `read_lines()` supports `git_uri()` paths — verified.
+The tool template passes `git_uri('.', $file_path, $commit)` as the
+`file_path` argument.
 
 ### read_as_table(file_path, lim)
 
-Use DuckDB's auto-detection via replacement scan.
+Uses DuckDB's `query_table()` for auto-detection.
 
 ```sql
 CREATE OR REPLACE MACRO read_as_table(file_path, lim := 100) AS TABLE
     SELECT * FROM query_table(file_path) LIMIT lim;
 ```
 
-**Risk:** `FROM $param` may not work with string substitution in
-mcp_publish_tool templates. Fallback: use explicit `read_csv_auto()`.
+**Known issue:** `query_table()` collides with Python's `import json`
+module (Python replacement scan finds the module before file scan). The
+MCP tool uses `FROM $file_path` (string replacement scan) instead, which
+bypasses Python namespace entirely but cannot support path resolution
+(DuckDB's FROM requires a string literal, not an expression).
 
 ## Tool Publications (sql/tools/files.sql)
 

@@ -55,6 +55,7 @@ def list_tools(con):
 
 # Module-level cache for tool schemas (DuckDB connections don't
 # support arbitrary attribute assignment in newer versions).
+# Populated once per process; valid because mcp_server is session-scoped.
 _schema_cache = {}
 
 

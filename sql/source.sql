@@ -84,6 +84,12 @@ CREATE OR REPLACE MACRO file_line_count(file_pattern) AS TABLE
 -- read_as_table: Read a data file (CSV, JSON, Parquet, etc.) as a table
 -- using DuckDB's auto-detection via replacement scan.
 --
+-- NOTE: Uses query_table() which goes through Python replacement scan.
+-- In Python+DuckDB contexts where `import json` is active, reading
+-- .json files will fail due to namespace collision. The MCP tool
+-- (ReadAsTable in tools/files.sql) uses FROM $file_path instead,
+-- which bypasses Python replacement scan entirely.
+--
 -- Examples:
 --   SELECT * FROM read_as_table('data.csv');
 --   SELECT * FROM read_as_table('results.json', 10);
