@@ -8,18 +8,41 @@
 -- sitting_duck's macro first: DROP MACRO TABLE IF EXISTS read_lines;
 -- See: https://github.com/teaguesterling/sitting_duck/issues/22
 
--- read_source: Read lines from a file with optional line selection.
--- This is the primary replacement for cat/head/tail bash commands.
+-- list_files: List files matching a glob pattern.
+-- Uses shell glob syntax (*.sql, src/**/*.py).
+--
+-- Git mode (listing files at a revision) is handled by the tool
+-- layer using git_tree() from duck_tails, not this macro.
+--
+-- Examples:
+--   SELECT * FROM list_files('src/*.py');
+--   SELECT * FROM list_files('sql/**/*.sql');
+CREATE OR REPLACE MACRO list_files(pattern) AS TABLE
+    SELECT file AS file_path
+    FROM glob(pattern)
+    ORDER BY file_path;
+
+-- read_source: Read lines from a file with optional line selection
+-- and pattern matching. This is the primary replacement for
+-- cat/head/tail bash commands.
+--
+-- The file_path can be a local path or a git_uri() for reading
+-- files at specific revisions (requires duck_tails extension).
+-- Git dispatch is handled by the tool layer, not this macro.
 --
 -- Examples:
 --   SELECT * FROM read_source('src/main.py');
 --   SELECT * FROM read_source('src/main.py', '10-20');
 --   SELECT * FROM read_source('src/main.py', '42 +/-5');
-CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0) AS TABLE
+--   SELECT * FROM read_source('src/main.py', match := 'import');
+--   SELECT * FROM read_source('src/main.py', '1-20', match := 'def');
+CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0,
+                                     match := NULL) AS TABLE
     SELECT
         line_number,
         content
-    FROM read_lines(file_path, lines, context := ctx);
+    FROM read_lines(file_path, lines, context := ctx)
+    WHERE match IS NULL OR content ILIKE '%' || match || '%';
 
 -- read_source_numbered: Like read_source but includes file_path column
 -- for multi-file batch reads via glob patterns.
@@ -57,3 +80,12 @@ CREATE OR REPLACE MACRO file_line_count(file_pattern) AS TABLE
     FROM read_lines(file_pattern)
     GROUP BY file_path
     ORDER BY line_count DESC;
+
+-- read_as_table: Read a data file (CSV, JSON, Parquet, etc.) as a table
+-- using DuckDB's auto-detection via replacement scan.
+--
+-- Examples:
+--   SELECT * FROM read_as_table('data.csv');
+--   SELECT * FROM read_as_table('results.json', 10);
+CREATE OR REPLACE MACRO read_as_table(file_path, lim := 100) AS TABLE
+    SELECT * FROM query_table(file_path) LIMIT lim;
