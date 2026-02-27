@@ -14,6 +14,22 @@ import pytest
 
 from conftest import CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH
 
+# sitting_duck test data for multi-language coverage.
+# Set SITTING_DUCK_DATA env var to override the default path.
+SITTING_DUCK_DATA = os.environ.get(
+    "SITTING_DUCK_DATA",
+    os.path.expanduser("~/Projects/sitting_duck/test/data"),
+)
+JS_SIMPLE = os.path.join(SITTING_DUCK_DATA, "javascript/simple.js")
+JS_IMPORTS = os.path.join(SITTING_DUCK_DATA, "javascript/imports.js")
+RUST_SIMPLE = os.path.join(SITTING_DUCK_DATA, "rust/simple.rs")
+RUST_IMPORTS = os.path.join(SITTING_DUCK_DATA, "rust/imports.rs")
+GO_SIMPLE = os.path.join(SITTING_DUCK_DATA, "go/simple.go")
+PY_SIMPLE = os.path.join(SITTING_DUCK_DATA, "python/simple.py")
+PY_IMPORTS = os.path.join(SITTING_DUCK_DATA, "python/imports.py")
+
+_has_sitting_duck_data = os.path.isdir(SITTING_DUCK_DATA)
+
 # The 11 V1 tools that should be published
 V1_TOOLS = [
     "ListFiles",
@@ -56,7 +72,7 @@ def list_tools(con):
 # Module-level cache for tool schemas (DuckDB connections don't
 # support arbitrary attribute assignment in newer versions).
 # Populated once per process; valid because mcp_server is session-scoped.
-_schema_cache = {}
+_mcp_schemas_cache = {}
 
 
 def call_tool(con, tool_name, arguments=None):
@@ -68,12 +84,15 @@ def call_tool(con, tool_name, arguments=None):
     """
     args = dict(arguments or {})
 
-    # Auto-fill missing params with null using cached tool schemas
-    if not _schema_cache:
-        _schema_cache.update({
+    # Auto-fill missing params with null using cached tool schemas.
+    # Keyed on connection id so multiple connections don't cross-pollinate.
+    con_id = id(con)
+    if con_id not in _mcp_schemas_cache:
+        _mcp_schemas_cache[con_id] = {
             t["name"]: t["inputSchema"] for t in list_tools(con)
-        })
-    schema = _schema_cache.get(tool_name, {})
+        }
+    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
+
     for prop in schema.get("properties", {}):
         if prop not in args:
             args[prop] = None
@@ -272,6 +291,143 @@ class TestCodeStructure:
         assert md_row_count(text) > 0
 
 
+# -- Code: Multi-language (sitting_duck test data) --
+
+_skip_no_data = pytest.mark.skipif(
+    not _has_sitting_duck_data,
+    reason="sitting_duck test data not found",
+)
+
+
+@_skip_no_data
+class TestCodeToolsJavaScript:
+    def test_find_definitions(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": JS_SIMPLE,
+        })
+        assert "hello" in text
+        assert "Calculator" in text
+        assert "fetchData" in text
+
+    def test_find_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindCalls", {
+            "file_pattern": JS_SIMPLE,
+        })
+        assert md_row_count(text) > 0
+        assert "log" in text
+
+    def test_find_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindImports", {
+            "file_pattern": JS_IMPORTS,
+        })
+        assert "react" in text
+
+    def test_code_structure(self, mcp_server):
+        text = call_tool(mcp_server, "CodeStructure", {
+            "file_pattern": JS_SIMPLE,
+        })
+        assert "Calculator" in text
+        assert md_row_count(text) > 0
+
+
+@_skip_no_data
+class TestCodeToolsRust:
+    def test_find_definitions(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": RUST_SIMPLE,
+        })
+        assert "User" in text
+        assert "create_user" in text
+
+    def test_find_definitions_filter(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": RUST_SIMPLE,
+            "name_pattern": "create%",
+        })
+        assert "create_user" in text
+        assert md_row_count(text) >= 1
+
+    def test_find_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindCalls", {
+            "file_pattern": RUST_SIMPLE,
+        })
+        assert md_row_count(text) > 0
+        assert "validate_email" in text
+
+    def test_find_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindImports", {
+            "file_pattern": RUST_IMPORTS,
+        })
+        assert "HashMap" in text
+
+    def test_code_structure(self, mcp_server):
+        text = call_tool(mcp_server, "CodeStructure", {
+            "file_pattern": RUST_SIMPLE,
+        })
+        assert "User" in text
+        assert "Status" in text
+
+
+@_skip_no_data
+class TestCodeToolsGo:
+    def test_find_definitions(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": GO_SIMPLE,
+        })
+        assert "Hello" in text
+        assert "main" in text
+
+    def test_find_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindCalls", {
+            "file_pattern": GO_SIMPLE,
+        })
+        assert md_row_count(text) > 0
+
+    def test_find_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindImports", {
+            "file_pattern": GO_SIMPLE,
+        })
+        assert "fmt" in text
+
+    def test_code_structure(self, mcp_server):
+        text = call_tool(mcp_server, "CodeStructure", {
+            "file_pattern": GO_SIMPLE,
+        })
+        assert "Hello" in text
+        assert md_row_count(text) > 0
+
+
+@_skip_no_data
+class TestCodeToolsPython:
+    """Tests using sitting_duck's controlled Python test fixtures."""
+
+    def test_find_definitions(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": PY_SIMPLE,
+        })
+        assert "hello" in text
+        assert "MyClass" in text
+
+    def test_find_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindCalls", {
+            "file_pattern": PY_SIMPLE,
+        })
+        assert md_row_count(text) > 0
+
+    def test_find_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindImports", {
+            "file_pattern": PY_IMPORTS,
+        })
+        assert "os" in text
+
+    def test_code_structure(self, mcp_server):
+        text = call_tool(mcp_server, "CodeStructure", {
+            "file_pattern": PY_SIMPLE,
+        })
+        assert "MyClass" in text
+        assert md_row_count(text) > 0
+
+
 # -- Docs --
 
 
@@ -298,9 +454,9 @@ class TestMDSection:
     def test_reads_specific_section(self, mcp_server):
         text = call_tool(mcp_server, "MDSection", {
             "file_path": SPEC_PATH,
-            "section_id": "status",
+            "section_id": "architecture",
         })
-        assert len(text) > 0
+        assert "architecture" in text.lower()
 
 
 # -- Git --
@@ -314,6 +470,19 @@ class TestGitChanges:
     def test_count_parameter(self, mcp_server):
         text = call_tool(mcp_server, "GitChanges", {"count": "3"})
         assert md_row_count(text) <= 3
+
+    def test_messages_are_single_line(self, mcp_server):
+        text = call_tool(mcp_server, "GitChanges", {})
+        # Data rows only (skip header + separator)
+        data_lines = [
+            l for l in text.strip().split("\n")
+            if l.strip().startswith("|")
+        ][2:]
+        for line in data_lines:
+            # Each message cell should have no embedded newlines
+            cells = line.split("|")
+            message = cells[4].strip() if len(cells) > 4 else ""
+            assert "\n" not in message
 
 
 class TestGitBranches:
