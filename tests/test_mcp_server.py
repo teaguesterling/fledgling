@@ -1,0 +1,316 @@
+"""Tests for MCP server tool publication and execution.
+
+Tests the MCP transport layer: tool discovery, parameter handling, and
+end-to-end tool execution via memory transport. Underlying macro behavior
+is covered by tier-specific tests (test_source.py, test_code.py, etc.).
+
+Uses the repo itself as test data (dog-fooding).
+"""
+
+import json
+import os
+
+import pytest
+
+from conftest import CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH
+
+# The 11 V1 tools that should be published
+V1_TOOLS = [
+    "ListFiles",
+    "ReadLines",
+    "ReadAsTable",
+    "FindDefinitions",
+    "FindCalls",
+    "FindImports",
+    "CodeStructure",
+    "MDOutline",
+    "MDSection",
+    "GitChanges",
+    "GitBranches",
+]
+
+
+# -- Helpers --
+
+
+def mcp_request(con, method, params=None):
+    """Send a JSON-RPC request to the MCP memory transport server."""
+    request = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params or {},
+    })
+    raw = con.execute(
+        "SELECT mcp_server_send_request(?)", [request]
+    ).fetchone()[0]
+    return json.loads(raw)
+
+
+def list_tools(con):
+    """Return the list of tool descriptors from the MCP server."""
+    resp = mcp_request(con, "tools/list")
+    return resp["result"]["tools"]
+
+
+def call_tool(con, tool_name, arguments=None):
+    """Call an MCP tool and return the text content.
+
+    Automatically fills missing optional parameters with null to work
+    around duckdb_mcp#19 (omitted params aren't substituted with NULL).
+    Tool SQL templates use NULLIF($param, 'null') to convert back.
+    """
+    args = dict(arguments or {})
+
+    # Auto-fill missing params with null using cached tool schemas
+    if not hasattr(con, "_mcp_schemas"):
+        con._mcp_schemas = {
+            t["name"]: t["inputSchema"] for t in list_tools(con)
+        }
+    schema = con._mcp_schemas.get(tool_name, {})
+    for prop in schema.get("properties", {}):
+        if prop not in args:
+            args[prop] = None
+
+    resp = mcp_request(con, "tools/call", {
+        "name": tool_name,
+        "arguments": args,
+    })
+    assert "error" not in resp, (
+        f"Tool {tool_name} error: {resp['error']['message']}"
+    )
+    return resp["result"]["content"][0]["text"]
+
+
+def md_row_count(text):
+    """Count data rows in a markdown table (excludes header + separator)."""
+    lines = [l for l in text.strip().split("\n") if l.strip().startswith("|")]
+    return max(0, len(lines) - 2)
+
+
+# -- Tool Discovery --
+
+
+class TestToolDiscovery:
+    def test_all_v1_tools_listed(self, mcp_server):
+        names = {t["name"] for t in list_tools(mcp_server)}
+        for tool in V1_TOOLS:
+            assert tool in names, f"Missing tool: {tool}"
+
+    def test_tool_has_description(self, mcp_server):
+        for tool in list_tools(mcp_server):
+            if tool["name"] in V1_TOOLS:
+                assert tool["description"], f"{tool['name']} has empty description"
+
+    def test_tool_has_input_schema(self, mcp_server):
+        for tool in list_tools(mcp_server):
+            if tool["name"] in V1_TOOLS:
+                schema = tool["inputSchema"]
+                assert schema["type"] == "object"
+                assert "properties" in schema
+
+    def test_query_tool_available(self, mcp_server):
+        names = {t["name"] for t in list_tools(mcp_server)}
+        assert "query" in names
+
+
+# -- Files --
+
+
+class TestListFiles:
+    def test_lists_files_by_glob(self, mcp_server):
+        pattern = os.path.join(PROJECT_ROOT, "sql/*.sql")
+        text = call_tool(mcp_server, "ListFiles", {"pattern": pattern})
+        assert "source.sql" in text
+        assert "code.sql" in text
+
+    def test_lists_git_files(self, mcp_server):
+        text = call_tool(mcp_server, "ListFiles", {
+            "pattern": "sql/%",
+            "commit": "HEAD",
+        })
+        assert "source.sql" in text
+
+    def test_no_matches_returns_empty(self, mcp_server):
+        pattern = os.path.join(PROJECT_ROOT, "nonexistent_xyz_/*.foo")
+        text = call_tool(mcp_server, "ListFiles", {"pattern": pattern})
+        assert md_row_count(text) == 0
+
+
+class TestReadLines:
+    def test_reads_whole_file(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {"file_path": CONFTEST_PATH})
+        assert "import pytest" in text
+        assert md_row_count(text) > 50
+
+    def test_reads_line_range(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {
+            "file_path": CONFTEST_PATH,
+            "lines": "1-5",
+        })
+        assert md_row_count(text) == 5
+
+    def test_reads_with_context(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {
+            "file_path": CONFTEST_PATH,
+            "lines": "10",
+            "ctx": "2",
+        })
+        assert md_row_count(text) == 5  # line 10 ± 2
+
+    def test_reads_with_match(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {
+            "file_path": CONFTEST_PATH,
+            "match": "import",
+        })
+        rows = md_row_count(text)
+        assert rows > 0
+        # Every data row should contain the match term
+        data_lines = text.strip().split("\n")[2:]
+        for line in data_lines:
+            if line.strip().startswith("|"):
+                assert "import" in line.lower()
+
+    def test_reads_git_version(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {
+            "file_path": "sql/source.sql",
+            "commit": "HEAD",
+        })
+        assert "read_source" in text
+
+    def test_match_and_lines_compose(self, mcp_server):
+        text = call_tool(mcp_server, "ReadLines", {
+            "file_path": CONFTEST_PATH,
+            "lines": "1-20",
+            "match": "import",
+        })
+        rows = md_row_count(text)
+        assert rows > 0
+        assert rows < 20
+
+
+class TestReadAsTable:
+    def test_reads_csv(self, mcp_server, tmp_path):
+        csv_file = tmp_path / "test.csv"
+        csv_file.write_text("name,value\nalpha,1\nbeta,2\ngamma,3\n")
+        text = call_tool(mcp_server, "ReadAsTable", {
+            "file_path": str(csv_file),
+        })
+        assert "alpha" in text
+        assert md_row_count(text) == 3
+
+    def test_reads_json(self, mcp_server, tmp_path):
+        json_file = tmp_path / "test.json"
+        json_file.write_text('[{"x": 1, "y": "a"}, {"x": 2, "y": "b"}]\n')
+        text = call_tool(mcp_server, "ReadAsTable", {
+            "file_path": str(json_file),
+        })
+        assert md_row_count(text) == 2
+
+    def test_limit_parameter(self, mcp_server, tmp_path):
+        csv_file = tmp_path / "big.csv"
+        lines = ["id,val"] + [f"{i},{i*10}" for i in range(200)]
+        csv_file.write_text("\n".join(lines) + "\n")
+        text = call_tool(mcp_server, "ReadAsTable", {
+            "file_path": str(csv_file),
+            "limit": "5",
+        })
+        assert md_row_count(text) == 5
+
+
+# -- Code --
+
+
+class TestFindDefinitions:
+    def test_finds_python_functions(self, mcp_server):
+        text = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": CONFTEST_PATH,
+        })
+        assert "load_sql" in text
+
+    def test_filters_by_name(self, mcp_server):
+        text_filtered = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": CONFTEST_PATH,
+            "name_pattern": "load%",
+        })
+        text_all = call_tool(mcp_server, "FindDefinitions", {
+            "file_pattern": CONFTEST_PATH,
+        })
+        assert "load_sql" in text_filtered
+        assert md_row_count(text_filtered) < md_row_count(text_all)
+
+
+class TestFindCalls:
+    def test_finds_function_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindCalls", {
+            "file_pattern": CONFTEST_PATH,
+        })
+        assert md_row_count(text) > 0
+
+
+class TestFindImports:
+    def test_finds_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindImports", {
+            "file_pattern": CONFTEST_PATH,
+        })
+        assert "pytest" in text
+        assert "duckdb" in text
+
+
+class TestCodeStructure:
+    def test_returns_overview(self, mcp_server):
+        text = call_tool(mcp_server, "CodeStructure", {
+            "file_pattern": CONFTEST_PATH,
+        })
+        assert "load_sql" in text
+        assert md_row_count(text) > 0
+
+
+# -- Docs --
+
+
+class TestMDOutline:
+    def test_returns_headings(self, mcp_server):
+        text = call_tool(mcp_server, "MDOutline", {
+            "file_pattern": SPEC_PATH,
+        })
+        assert md_row_count(text) > 5
+
+    def test_max_level_filter(self, mcp_server):
+        text_l1 = call_tool(mcp_server, "MDOutline", {
+            "file_pattern": SPEC_PATH,
+            "max_level": "1",
+        })
+        text_l3 = call_tool(mcp_server, "MDOutline", {
+            "file_pattern": SPEC_PATH,
+            "max_level": "3",
+        })
+        assert md_row_count(text_l1) < md_row_count(text_l3)
+
+
+class TestMDSection:
+    def test_reads_specific_section(self, mcp_server):
+        text = call_tool(mcp_server, "MDSection", {
+            "file_path": SPEC_PATH,
+            "section_id": "status",
+        })
+        assert len(text) > 0
+
+
+# -- Git --
+
+
+class TestGitChanges:
+    def test_returns_recent_commits(self, mcp_server):
+        text = call_tool(mcp_server, "GitChanges", {})
+        assert md_row_count(text) > 0
+
+    def test_count_parameter(self, mcp_server):
+        text = call_tool(mcp_server, "GitChanges", {"count": "3"})
+        assert md_row_count(text) <= 3
+
+
+class TestGitBranches:
+    def test_lists_branches(self, mcp_server):
+        text = call_tool(mcp_server, "GitBranches", {})
+        assert md_row_count(text) > 0
