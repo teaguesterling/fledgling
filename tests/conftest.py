@@ -101,21 +101,36 @@ def mcp_server():
     """MCP server with all tools published via memory transport.
 
     Session-scoped: all MCP tests share one connection since tools are
-    read-only queries. Loads all extensions, macros, and tool publications,
-    then starts the MCP server on memory transport for testing.
+    read-only queries. Loads all extensions, macros, tool publications,
+    and resolve() for path sandboxing.
+
+    Does NOT enable filesystem lockdown (enable_external_access = false)
+    because TestReadAsTable creates tmp_path files outside sextant_root.
+    Lockdown is tested separately and enforced in the init script.
     """
     con = duckdb.connect(":memory:")
+    # Extensions (must load before any sandbox lockdown)
     con.execute("LOAD read_lines")
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
     con.execute("DROP MACRO TABLE IF EXISTS read_lines")
+    # Sandbox: set root and load resolve() macro
+    con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
+    load_sql(con, "sandbox.sql")
+    # Macros
     load_sql(con, "source.sql")
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    # MCP tools (skip missing files so partial implementations work)
     con.execute("LOAD duckdb_mcp")
-    load_sql(con, "tools.sql")
+    for tool_file in ["tools/files.sql", "tools/code.sql",
+                      "tools/docs.sql", "tools/git.sql"]:
+        try:
+            load_sql(con, tool_file)
+        except FileNotFoundError:
+            pass
     con.execute("SELECT mcp_server_start('memory')")
     yield con
     con.close()
