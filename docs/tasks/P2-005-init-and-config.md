@@ -1,6 +1,6 @@
 # P2-005: Init Script, Test Fixture, Config & Sandboxing
 
-**Status:** In progress (sandbox.sql + test fixture complete, init script + config pending)
+**Status:** Complete (all files created; sitting_duck#22 workaround removed — fixed upstream)
 **Depends on:** P2-001 through P2-004 (all tool categories)
 **Estimated scope:** New files + fixture update
 

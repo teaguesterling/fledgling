@@ -87,8 +87,6 @@ def all_macros(con):
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
-    # sitting_duck's read_lines macro shadows the extension; drop it
-    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
     load_sql(con, "source.sql")
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
@@ -114,7 +112,6 @@ def mcp_server():
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
-    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
     # Sandbox: set root and load resolve() macro
     con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
     load_sql(con, "sandbox.sql")
