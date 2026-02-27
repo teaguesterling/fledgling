@@ -80,15 +80,12 @@ def repo_macros(con):
 def all_macros(con):
     """Connection with ALL extensions and ALL macros loaded.
 
-    Load order: extensions first, then drop sitting_duck's conflicting
-    read_lines macro (see sitting_duck#22), then load SQL macro files.
+    Load order: extensions first, then SQL macro files.
     """
     con.execute("LOAD read_lines")
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
-    # sitting_duck's read_lines macro shadows the extension; drop it
-    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
     load_sql(con, "source.sql")
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
@@ -114,7 +111,6 @@ def mcp_server():
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
-    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
     # Sandbox: set root and load resolve() macro
     con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
     load_sql(con, "sandbox.sql")

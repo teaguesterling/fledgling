@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "source_sextant": {
+      "command": "duckdb",
+      "args": ["-init", "init-source-sextant.sql"],
+      "cwd": "/absolute/path/to/source-sextant",
+      "env": {
+        "SEXTANT_PROJECT_ROOT": "/path/to/your/project"
+      }
+    }
+  }
+}

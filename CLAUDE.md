@@ -103,7 +103,7 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 
 1. **Table refs validate at macro definition time** — `raw_conversations` must exist before loading `conversations.sql`. Macro-to-macro refs ARE deferred.
 
-2. **sitting_duck#22** — `sitting_duck` defines a `read_lines` table macro that shadows the `read_lines` extension. Fix: `DROP MACRO TABLE IF EXISTS read_lines` after loading sitting_duck.
+2. **sitting_duck#22** — Fixed upstream. `sitting_duck` no longer shadows the `read_lines` extension; both are internal catalog entries and coexist. No workaround needed.
 
 3. **sitting_duck#23** — Python import names are empty; use `peek` column instead.
 
@@ -145,10 +145,13 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 ## File Organization
 
 ```
+init-source-sextant.sql   Entry point for duckdb -init
 sql/
   <tier>.sql              Macro definitions (one file per tier)
   sandbox.sql             resolve() macro + sandbox setup
   tools/<tier>.sql        Tool publications (one file per tier)
+config/
+  claude-code.example.json  Example MCP server config
 tests/
   conftest.py             Fixtures, helpers, synthetic data
   test_<tier>.py          Macro tests (one file per tier)
@@ -161,15 +164,15 @@ docs/
 ## Extension load order
 
 ```
-1. LOAD read_lines
-2. LOAD sitting_duck
-3. LOAD markdown
-4. LOAD duck_tails
-5. DROP MACRO TABLE IF EXISTS read_lines   (sitting_duck#22)
+1. LOAD duckdb_mcp                          (before lockdown; duckdb#17136)
+2. LOAD read_lines
+3. LOAD sitting_duck
+4. LOAD markdown
+5. LOAD duck_tails
 6. SET VARIABLE sextant_root = ...
-7. Load sandbox.sql
+7. Load sandbox.sql                         (resolve() macro)
 8. Load macro files (source, code, docs, repo)
-9. LOAD duckdb_mcp
-10. Load tool publication files
+9. Load tool publication files
+10. Filesystem lockdown                     (after all .read commands)
 11. Start MCP server
 ```
