@@ -65,12 +65,14 @@ def call_tool(con, tool_name, arguments=None):
     """
     args = dict(arguments or {})
 
-    # Auto-fill missing params with null using cached tool schemas
-    if not _mcp_schemas_cache:
-        _mcp_schemas_cache.update({
+    # Auto-fill missing params with null using cached tool schemas.
+    # Keyed on connection id so multiple connections don't cross-pollinate.
+    con_id = id(con)
+    if con_id not in _mcp_schemas_cache:
+        _mcp_schemas_cache[con_id] = {
             t["name"]: t["inputSchema"] for t in list_tools(con)
-        })
-    schema = _mcp_schemas_cache.get(tool_name, {})
+        }
+    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
     for prop in schema.get("properties", {}):
         if prop not in args:
             args[prop] = None
@@ -295,9 +297,9 @@ class TestMDSection:
     def test_reads_specific_section(self, mcp_server):
         text = call_tool(mcp_server, "MDSection", {
             "file_path": SPEC_PATH,
-            "section_id": "status",
+            "section_id": "architecture",
         })
-        assert len(text) > 0
+        assert "architecture" in text.lower()
 
 
 # -- Git --
