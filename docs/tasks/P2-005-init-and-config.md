@@ -1,4 +1,4 @@
-# P2-005: Init Script, Test Fixture & Config
+# P2-005: Init Script, Test Fixture, Config & Sandboxing
 
 **Status:** Not started
 **Depends on:** P2-001 through P2-004 (all tool categories)
@@ -8,16 +8,98 @@
 
 Create the entry point that ties everything together: the init SQL script
 that loads extensions, macros, and tool modules, then starts the MCP server.
-Also update the test fixture to load modular tool files and provide an
-example Claude Code configuration.
+Also establish the path sandboxing model, update the test fixture for modular
+tool files, and provide an example Claude Code configuration.
 
 ## Files
 
 | File | Action | Description |
 |------|--------|-------------|
+| `sql/sandbox.sql` | Create | `sextant_root` variable, `resolve()` macro, lockdown |
 | `init-source-sextant.sql` | Create | Entry point for `duckdb -init` |
 | `config/claude-code.example.json` | Create | Example MCP server config |
-| `tests/conftest.py` | Update | Load `sql/tools/*.sql` instead of `sql/tools.sql` |
+| `tests/conftest.py` | Update | Load modular tool files + sandbox setup |
+
+## Sandboxing Model
+
+### Problem
+
+DuckDB's `allowed_directories` only matches **absolute paths** — relative
+paths fail the check even when `file_search_path` would resolve them to an
+allowed directory (see [duckdb#21102](https://github.com/duckdb/duckdb/issues/21102)).
+MCP clients send relative paths.
+
+### Solution
+
+1. **Before lockdown**: capture CWD into a variable via `getenv('PWD')`
+2. **`resolve(path)`**: scalar macro that prepends `sextant_root` for relative paths
+3. **`allowed_directories`**: set from `sextant_root` plus user-configurable extras
+4. **Lockdown**: `enable_external_access = false`, `lock_configuration = true`
+5. **All tool SQL templates** use `resolve($file_path)` instead of bare `$file_path`
+
+### sql/sandbox.sql
+
+```sql
+-- Capture project root before lockdown.
+-- Override sextant_root before loading this file to use a custom root.
+SET VARIABLE sextant_root = COALESCE(
+    getvariable('sextant_root'),
+    getenv('PWD')
+);
+
+-- Additional allowed directories (set before loading this file).
+-- Example: SET VARIABLE sextant_extra_dirs = ['/data/shared', '/opt/models'];
+-- Defaults to empty list if not set.
+
+-- Resolve relative paths against project root.
+-- Absolute paths (starting with /) pass through unchanged.
+-- When duckdb#21102 is fixed, this can become a no-op.
+CREATE OR REPLACE MACRO resolve(p) AS
+    CASE WHEN p[1] = '/' THEN p
+         ELSE getvariable('sextant_root') || '/' || p
+    END;
+
+-- Lock down filesystem access.
+-- sextant_root is always allowed; extras are appended if set.
+SET allowed_directories = list_concat(
+    [getvariable('sextant_root')],
+    COALESCE(getvariable('sextant_extra_dirs'), [])
+);
+SET enable_external_access = false;
+SET lock_configuration = true;
+```
+
+### Usage from init script
+
+```sql
+-- Optional: override root and/or add extra dirs before sandbox.sql
+-- SET VARIABLE sextant_root = '/path/to/project';
+-- SET VARIABLE sextant_extra_dirs = ['/data/shared'];
+
+.read sql/sandbox.sql
+```
+
+### Usage from tool SQL templates
+
+```sql
+-- All file-reading tools resolve paths through the macro:
+SELECT * FROM read_lines(resolve($file_path), ...)
+SELECT * FROM read_ast(resolve($file_pattern))
+SELECT * FROM read_markdown_sections(resolve($file_pattern), ...)
+```
+
+### What's sandboxed
+
+- All `read_lines`, `read_ast`, `read_markdown_*`, `glob()` calls are restricted
+  to `sextant_root` (+ any `sextant_extra_dirs`)
+- Path traversal (`../../../etc/passwd`) is blocked by DuckDB
+- `getenv()` is disabled after lockdown
+- Configuration cannot be changed after lockdown
+
+### What's NOT sandboxed (by design)
+
+- Git operations via `duck_tails` (operate on the repo, which is the project root)
+- The `query` built-in tool (full SQL access, but filesystem is still locked)
 
 ## init-source-sextant.sql
 
@@ -30,7 +112,7 @@ any tool category can be disabled by commenting out its line.
 .mode csv
 .output /dev/null
 
--- Load extensions
+-- Load extensions (must happen before sandbox lockdown)
 LOAD duckdb_mcp;
 LOAD read_lines;
 LOAD sitting_duck;
@@ -39,6 +121,13 @@ LOAD duck_tails;
 
 -- Fix sitting_duck read_lines collision (sitting_duck#22)
 DROP MACRO TABLE IF EXISTS read_lines;
+
+-- Optional: set project root and extra allowed dirs before sandbox
+-- SET VARIABLE sextant_root = '/custom/project/path';
+-- SET VARIABLE sextant_extra_dirs = ['/data/shared'];
+
+-- Sandbox: capture root, create resolve(), lock filesystem
+.read sql/sandbox.sql
 
 -- Load macro definitions
 .read sql/source.sql
@@ -69,23 +158,47 @@ SELECT mcp_server_start('stdio', '{
 not relative to the init script. The Claude Code config must set the
 correct working directory or use absolute paths.
 
+**Note:** Extensions must load BEFORE `sandbox.sql` because
+`enable_external_access = false` blocks extension loading
+(see [duckdb#17136](https://github.com/duckdb/duckdb/issues/17136)).
+
 ## Test Fixture Update
 
-Replace `load_sql(con, "tools.sql")` with individual category loads:
+The fixture mirrors the init script but uses memory transport and
+sets `sextant_root` to `PROJECT_ROOT` explicitly:
 
 ```python
 @pytest.fixture(scope="session")
 def mcp_server():
     con = duckdb.connect(":memory:")
-    # ... extensions and macros as before ...
+    # Extensions
+    con.execute("LOAD read_lines")
+    con.execute("LOAD sitting_duck")
+    con.execute("LOAD markdown")
+    con.execute("LOAD duck_tails")
+    con.execute("DROP MACRO TABLE IF EXISTS read_lines")
+    # Sandbox (set root before loading sandbox.sql)
+    con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
+    load_sql(con, "sandbox.sql")
+    # Macros
+    load_sql(con, "source.sql")
+    load_sql(con, "code.sql")
+    load_sql(con, "docs.sql")
+    load_sql(con, "repo.sql")
+    # MCP tools
     con.execute("LOAD duckdb_mcp")
-    for tool_file in ["tools/files.sql", "tools/code.sql",
-                      "tools/docs.sql", "tools/git.sql"]:
-        load_sql(con, tool_file)
+    for f in ["tools/files.sql", "tools/code.sql",
+              "tools/docs.sql", "tools/git.sql"]:
+        load_sql(con, f)
     con.execute("SELECT mcp_server_start('memory')")
     yield con
     con.close()
 ```
+
+**Note:** The test fixture does NOT lock down filesystem access (no
+`enable_external_access = false`) because `tmp_path` files in
+`TestReadAsTable` live outside the project root. The sandbox.sql
+file should be structured so lockdown can be skipped for testing.
 
 ## Example Config (config/claude-code.example.json)
 
@@ -95,13 +208,14 @@ def mcp_server():
     "source_sextant": {
       "command": "duckdb",
       "args": ["-init", "/absolute/path/to/source-sextant/init-source-sextant.sql"],
-      "cwd": "/absolute/path/to/source-sextant"
+      "cwd": "/path/to/your/project"
     }
   }
 }
 ```
 
 Goes in `~/.claude/settings.json` (global) or `.mcp.json` (per-project).
+CWD determines the project root (captured as `sextant_root`).
 
 ## Acceptance Criteria
 
@@ -109,3 +223,5 @@ Goes in `~/.claude/settings.json` (global) or `.mcp.json` (per-project).
 - All 94 existing tests still pass
 - `duckdb -init init-source-sextant.sql` starts without errors (manual smoke test)
 - Tools discoverable via `tools/list` JSON-RPC request
+- Files outside `sextant_root` cannot be read through tools (manual verification)
+- Path traversal attempts are blocked

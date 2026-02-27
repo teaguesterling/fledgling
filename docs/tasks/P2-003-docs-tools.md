@@ -23,6 +23,18 @@ Publish 2 MCP tools for structured markdown access. Both macros exist in
 | `sql/docs.sql` | No change | Macros already match tool signatures |
 | `sql/tools/docs.sql` | Create | 2 `mcp_publish_tool()` calls |
 
+## Path Resolution
+
+All tool SQL templates use `resolve()` for file path params (see P2-005).
+
+```sql
+-- MDOutline
+SELECT * FROM doc_outline(resolve($file_pattern), ...)
+
+-- MDSection
+SELECT * FROM read_doc_section(resolve($file_path), $section_id)
+```
+
 ## Tool Publications (sql/tools/docs.sql)
 
 MDOutline has one optional param (`max_level`, defaults to 3). MDSection has

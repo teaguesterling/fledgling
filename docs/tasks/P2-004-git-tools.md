@@ -24,26 +24,29 @@ are user-facing, macro names follow SQL convention).
 | `sql/repo.sql` | No change | Macros already match tool signatures |
 | `sql/tools/git.sql` | Create | 2 `mcp_publish_tool()` calls |
 
+## Path Resolution
+
+Git tools use `sextant_root` as the default repo path (instead of `'.'`)
+so they work correctly under the sandbox. The `resolve()` macro is used
+for the optional `path` param on GitChanges.
+
+```sql
+-- GitBranches: no params, uses sextant_root directly
+SELECT * FROM branch_list(getvariable('sextant_root'))
+
+-- GitChanges: optional path defaults to sextant_root
+SELECT * FROM recent_changes(
+    COALESCE(TRY_CAST(NULLIF($count, 'null') AS INT), 10),
+    COALESCE(resolve(NULLIF($path, 'null')), getvariable('sextant_root'))
+)
+```
+
 ## Tool Publications (sql/tools/git.sql)
 
 GitChanges has all-optional params. GitBranches has no params at all.
 
 For GitBranches, the SQL template has no `$param` references so the
-duckdb_mcp#19 bug doesn't apply — the template is just:
-```sql
-SELECT * FROM branch_list('.')
-```
-
-For GitChanges, both params are optional with defaults:
-```sql
-SELECT * FROM recent_changes(
-    COALESCE(TRY_CAST(NULLIF($count, 'null') AS INT), 10),
-    COALESCE(NULLIF($path, 'null'), '.')
-)
-```
-
-Note: `path` defaults to `'.'` (current working directory). When running as
-an MCP server, CWD is typically the project root.
+duckdb_mcp#19 bug doesn't apply.
 
 Tool descriptions:
 - **GitChanges**: "Recent commit history. Replaces `git log --oneline`."

@@ -25,6 +25,21 @@ in `source.sql` alongside the tool publications.
 | `sql/source.sql` | Update | Add `list_files`, `read_as_table`; update `read_source` with match/commit |
 | `sql/tools/files.sql` | Create | 3 `mcp_publish_tool()` calls |
 
+## Path Resolution
+
+All tool SQL templates must use `resolve($file_path)` to convert relative
+paths to absolute (required for DuckDB sandbox, see P2-005). The `resolve()`
+macro prepends `sextant_root` for relative paths, passes absolute paths through.
+
+```sql
+-- In tool SQL templates:
+resolve($file_path)          -- single file
+resolve($file_pattern)       -- glob pattern
+```
+
+Git mode (`commit` param) uses repo-relative paths, which `duck_tails`
+resolves against the repo root. These do NOT need `resolve()`.
+
 ## New/Updated Macros
 
 ### list_files(pattern, commit)
@@ -88,9 +103,28 @@ Each tool uses `NULLIF($param, 'null')` for optional params (duckdb_mcp#19
 workaround). Integer params also need `TRY_CAST(... AS INT)`.
 
 Key patterns:
+- Path resolution: `resolve($file_path)` for filesystem, bare for git
 - String optional: `NULLIF($param, 'null')`
 - Integer optional with default: `COALESCE(TRY_CAST(NULLIF($param, 'null') AS INT), default)`
-- Git dispatch: `CASE WHEN ... IS NULL THEN path ELSE git_uri('.', path, rev) END`
+- Git dispatch: `CASE WHEN ... IS NULL THEN resolve(path) ELSE git_uri('.', path, rev) END`
+
+Example for ReadLines:
+```sql
+SELECT mcp_publish_tool(
+    'ReadLines',
+    'Read lines from a file with optional filtering. Replaces cat/head/tail.',
+    'SELECT * FROM read_source(
+        CASE WHEN NULLIF($commit, ''null'') IS NULL
+             THEN resolve($file_path)
+             ELSE $file_path END,
+        NULLIF($lines, ''null''),
+        COALESCE(TRY_CAST(NULLIF($ctx, ''null'') AS INT), 0),
+        NULLIF($match, ''null''),
+        NULLIF($commit, ''null'')
+    )',
+    ...
+);
+```
 
 ## Acceptance Criteria
 

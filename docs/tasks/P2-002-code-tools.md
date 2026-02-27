@@ -26,6 +26,19 @@ publication file.
 | `sql/code.sql` | No change | Macros already match tool signatures |
 | `sql/tools/code.sql` | Create | 4 `mcp_publish_tool()` calls |
 
+## Path Resolution
+
+All tool SQL templates use `resolve($file_pattern)` to convert relative
+glob patterns to absolute paths for the DuckDB sandbox (see P2-005).
+
+```sql
+-- Example: FindDefinitions template
+SELECT * FROM find_definitions(
+    resolve($file_pattern),
+    COALESCE(NULLIF($name_pattern, 'null'), '%')
+)
+```
+
 ## Tool Publications (sql/tools/code.sql)
 
 Straightforward macro wrappers. FindDefinitions and FindCalls have one optional
