@@ -53,6 +53,9 @@ def list_tools(con):
     return resp["result"]["tools"]
 
 
+_schema_cache = {}
+
+
 def call_tool(con, tool_name, arguments=None):
     """Call an MCP tool and return the text content.
 
@@ -63,11 +66,12 @@ def call_tool(con, tool_name, arguments=None):
     args = dict(arguments or {})
 
     # Auto-fill missing params with null using cached tool schemas
-    if not hasattr(con, "_mcp_schemas"):
-        con._mcp_schemas = {
+    cache_key = id(con)
+    if cache_key not in _schema_cache:
+        _schema_cache[cache_key] = {
             t["name"]: t["inputSchema"] for t in list_tools(con)
         }
-    schema = con._mcp_schemas.get(tool_name, {})
+    schema = _schema_cache[cache_key].get(tool_name, {})
     for prop in schema.get("properties", {}):
         if prop not in args:
             args[prop] = None
