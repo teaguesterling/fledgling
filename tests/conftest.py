@@ -119,7 +119,7 @@ def all_macros(con):
     return con
 
 
-# The 16 V1 custom tools that should be published in all profiles
+# The 17 V1 custom tools that should be published in all profiles
 V1_TOOLS = [
     "ListFiles",
     "ReadLines",
@@ -132,6 +132,7 @@ V1_TOOLS = [
     "MDSection",
     "GitChanges",
     "GitBranches",
+    "GitTags",
     "Help",
     "ChatSessions",
     "ChatSearch",

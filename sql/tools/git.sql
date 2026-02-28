@@ -43,6 +43,15 @@ SELECT mcp_publish_tool(
 );
 
 SELECT mcp_publish_tool(
+    'GitTags',
+    'List all tags with metadata. Shows tag name, commit hash, tagger, date, and whether annotated.',
+    'SELECT * FROM tag_list(''' || getvariable('session_root') || ''')',
+    '{}',
+    '[]',
+    'markdown'
+);
+
+SELECT mcp_publish_tool(
     'GitDiffFile',
     'Line-level unified diff for a specific file between two git revisions. Shows additions, removals, and context lines.',
     'SELECT * FROM file_diff(

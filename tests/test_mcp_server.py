@@ -411,6 +411,13 @@ class TestGitBranches:
         assert md_row_count(text) > 0
 
 
+class TestGitTags:
+    def test_executes_without_error(self, mcp_server):
+        text = call_tool(mcp_server, "GitTags", {})
+        # Repo may or may not have tags; just verify the tool runs
+        assert text is not None
+
+
 class TestGitShow:
     def test_returns_file_at_head(self, mcp_server):
         text = call_tool(mcp_server, "GitShow", {
