@@ -1,20 +1,79 @@
-# source-sextant
+# Fledgling
 
-MCP tools that help AI agents get their bearings in a codebase — unified SQL views over code, git, docs, and conversations, powered by DuckDB.
+MCP tools that help AI agents get their bearings in a codebase — structured retrieval over code, git, docs, and conversations, powered by DuckDB.
 
-## What is this?
+## The Problem
 
-Source Sextant is a DuckDB-powered [MCP](https://modelcontextprotocol.io/) server that gives AI agents navigational awareness of development environments. It composes several DuckDB community extensions into a single queryable SQL surface:
+AI coding agents retrieve data through shell commands. To find where `parse_config` is defined, an agent runs `grep -rn 'def parse_config' src/`, gets back raw text with line numbers and file paths mashed together, and then reads the file to get context around the match. To understand a function's signature, it reads the whole file and scans for it. To check git history, it runs `git log`, parses the output, then runs `git show` on each commit.
 
-| Tier | Extension | What it provides |
-|------|-----------|------------------|
-| Source Retrieval | [`read_lines`](https://duckdb.org/community_extensions/extensions/read_lines) | Line-level file access with ranges and context |
-| Code Intelligence | [`sitting_duck`](https://github.com/teaguesterling/sitting_duck) | AST-based code analysis (27 languages) |
-| Documentation | [`duckdb_markdown`](https://github.com/teaguesterling/duckdb_markdown) | Markdown section/block parsing and extraction |
-| Repository | [`duck_tails`](https://github.com/teaguesterling/duck_tails) | Git repository state as queryable tables |
-| Conversations | DuckDB JSON | Claude Code conversation log analysis |
+Every one of these steps produces unstructured text the agent has to parse before it can reason about the answer. Tokens spent on text parsing are tokens not spent on solving your problem.
 
-Instead of agents running `cat`, `grep`, `git log`, and other bash commands that produce unstructured text, Source Sextant provides structured, composable SQL macros exposed as MCP tools.
+## What Fledgling Does
+
+Fledgling replaces shell-command-and-parse with purpose-built MCP tools that return structured results. Each tool is backed by a DuckDB community extension that understands the data format natively:
+
+| Capability | Replaces | Extension |
+|-----------|----------|-----------|
+| **Source Retrieval** — read lines, ranges, batches across files | `cat`, `head`, `tail`, `sed -n` | [`read_lines`](https://duckdb.org/community_extensions/extensions/read_lines) |
+| **Code Intelligence** — find definitions, calls, imports across 27 languages | `grep -rn "def ..."`, `find -name` | [`sitting_duck`](https://github.com/teaguesterling/sitting_duck) |
+| **Documentation** — read specific markdown sections, extract code examples | reading entire files to find one section | [`duckdb_markdown`](https://github.com/teaguesterling/duckdb_markdown) |
+| **Repository** — query commits, branches, tags, file history | `git log`, `git diff`, `git show` | [`duck_tails`](https://github.com/teaguesterling/duck_tails) |
+| **Conversations** — analyze Claude Code session history, tool usage, token costs | *(nothing — this capability didn't exist)* | DuckDB JSON |
+
+## Examples
+
+**Code Intelligence** — instead of `grep -rn 'def parse' src/`:
+```sql
+SELECT * FROM find_definitions('src/**/*.py', 'parse%');
+```
+Returns structured rows with file path, name, kind (function/class/method), line range, and signature — no text parsing needed.
+
+**Source Retrieval** — instead of `sed -n '37,47p' src/parser.py`:
+```sql
+SELECT * FROM read_context('src/parser.py', 42, 5);
+```
+Returns numbered lines centered on line 42 with 5 lines of context in each direction.
+
+**Documentation** — instead of reading an entire file to find one section:
+```sql
+SELECT * FROM read_doc_section('README.md', 'installation');
+```
+Returns just the matched section's content, with title and line range.
+
+**Repository** — instead of `git log --oneline -10`:
+```sql
+SELECT * FROM recent_changes(10);
+```
+Returns structured rows with hash, author, date, and message.
+
+**Conversations** — no shell equivalent:
+```sql
+SELECT * FROM bash_commands() WHERE replaceable_by IS NOT NULL;
+```
+Analyzes an agent's own bash usage to find commands Fledgling could replace.
+
+## How It Works
+
+Fledgling is a DuckDB init script. It loads extensions, defines SQL macros, publishes them as MCP tools, and starts a server:
+
+```
+duckdb -init init-fledgling.sql
+```
+
+Configure it in Claude Code's `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "fledgling": {
+      "command": "duckdb",
+      "args": ["-init", "/path/to/init-fledgling.sql"]
+    }
+  }
+}
+```
+
+Everything is read-only. Fledgling retrieves and analyzes — it never modifies files or makes git writes.
 
 ## Status
 
@@ -24,28 +83,6 @@ Alpha. SQL macros, MCP tool publications, and path sandboxing are working.
 - 8 of 11 MCP tools published (code, docs, git tools complete; file tools pending)
 - Conversation analysis macros fully tested (31 tests)
 - See [docs/vision/PRODUCT_SPEC.md](docs/vision/PRODUCT_SPEC.md) for the full specification
-
-## Quick Example
-
-```sql
--- Find all Python function definitions matching a pattern
-SELECT * FROM find_definitions('src/**/*.py', '%parse%');
-
--- Read specific lines with context
-SELECT * FROM read_context('src/parser.py', 42, 5);
-
--- Get the "Installation" section from a README without reading the whole file
-SELECT * FROM read_doc_section('README.md', 'installation');
-
--- What changed in src/ in the last 5 commits?
-SELECT * FROM recent_changes(5, '.');
-
--- Cross-tier composition: definitions in large files
-SELECT d.name, d.file_path, f.line_count
-FROM find_definitions('src/**/*.py') d
-JOIN file_line_count('src/**/*.py') f ON d.file_path = f.file_path
-WHERE f.line_count > 100;
-```
 
 ## Requirements
 

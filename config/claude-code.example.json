@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "fledgling": {
+      "command": "duckdb",
+      "args": ["-init", "init-fledgling.sql"],
+      "cwd": "/absolute/path/to/fledgling",
+      "env": {
+        "FLEDGLING_ROOT": "/path/to/your/project"
+      }
+    }
+  }
+}

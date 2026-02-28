@@ -1,4 +1,4 @@
--- Source Sextant: Code Intelligence Tool Publications
+-- Fledgling: Code Intelligence Tool Publications
 --
 -- Publishes 4 MCP tools for AST-based code analysis.
 -- Macros are defined in sql/code.sql; this file only creates MCP bindings.

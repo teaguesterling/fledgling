@@ -1,5 +1,5 @@
 [project]
-name = "source-sextant"
+name = "fledgling"
 version = "0.1.0"
 description = "MCP tools that help AI agents get their bearings in a codebase — unified SQL views over code, git, docs, and conversations, powered by DuckDB."
 readme = "README.md"

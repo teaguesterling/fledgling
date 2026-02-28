@@ -1,4 +1,4 @@
--- Source Sextant: Code Intelligence Macros (sitting_duck)
+-- Fledgling: Code Intelligence Macros (sitting_duck)
 --
 -- Semantic code analysis powered by sitting_duck's AST parsing.
 -- Replaces grep-based code search with structure-aware queries.

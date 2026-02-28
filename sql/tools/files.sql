@@ -1,4 +1,4 @@
--- Source Sextant: File Access Tool Publications
+-- Fledgling: File Access Tool Publications
 --
 -- MCP tool publications for file listing, reading, and data preview.
 -- Wraps macros from sql/source.sql.

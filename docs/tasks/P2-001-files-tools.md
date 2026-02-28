@@ -29,7 +29,7 @@ in `source.sql` alongside the tool publications.
 
 All tool SQL templates must use `resolve($file_path)` to convert relative
 paths to absolute (required for DuckDB sandbox, see P2-005). The `resolve()`
-macro prepends `sextant_root` for relative paths, passes absolute paths through.
+macro prepends `session_root` for relative paths, passes absolute paths through.
 
 ```sql
 -- In tool SQL templates:

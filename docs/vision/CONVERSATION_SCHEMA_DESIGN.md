@@ -164,7 +164,7 @@ tool call, extracts:
 - `leading_command`: First token (git, ls, python, ...)
 - `git_subcommand`: For git commands, the subcommand (add, diff, push, ...)
 - `category`: High-level classification (git_read, git_write, build_tools, ...)
-- `replaceable_by`: Which source_sextant tool could handle this (duck_tails,
+- `replaceable_by`: Which fledgling tool could handle this (duck_tails,
   sitting_duck, read_lines, duckdb_sql, or NULL)
 
 **`session_summary`** -- The dashboard view. Joins sessions with aggregated
@@ -196,7 +196,7 @@ GROUP BY tool_name
 ORDER BY total DESC;
 ```
 
-### What bash commands could source_sextant replace?
+### What bash commands could fledgling replace?
 
 ```sql
 SELECT
@@ -376,7 +376,7 @@ than "file_search".
    drift. These are genuinely useful warnings for anyone working with
    similar data.
 
-9. **What's Next** -- Tease source_sextant: structured tools replacing bash,
+9. **What's Next** -- Tease fledgling: structured tools replacing bash,
    conversation analysis as a live MCP capability.
 
 ### Key Visuals:

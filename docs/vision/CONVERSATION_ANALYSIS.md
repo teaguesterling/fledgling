@@ -1,4 +1,4 @@
-# Source Sextant: Conversation Log Analysis
+# Fledgling: Conversation Log Analysis
 
 **Date**: 2026-02-26
 **Method**: DuckDB `read_json_auto()` across all `~/.claude/projects/*/*.jsonl`
@@ -83,7 +83,7 @@ unstructured text, and can't compose with other tools.
 GitHub CLI is probably best left as bash — it's well-structured with
 `--json` flags and doesn't benefit much from a DuckDB layer.
 
-## Source Sextant Replacement Potential
+## Fledgling Replacement Potential
 
 | Replacement | Bash Calls Replaced | % of Bash | % of All Tools |
 |-------------|--------------------:|----------:|---------------:|
@@ -91,14 +91,14 @@ GitHub CLI is probably best left as bash — it's well-structured with
 | read_lines (file read) | 459 | 2.7% | 1.1% |
 | sitting_duck (code search) | 756 | 4.4% | 1.7% |
 | DuckDB SQL (text processing) | 98 | 0.6% | 0.2% |
-| **Total source_sextant** | **3,335** | **19.6%** | **7.7%** |
+| **Total fledgling** | **3,335** | **19.6%** | **7.7%** |
 | safe-git (future, git write) | 2,810 | 16.5% | 6.5% |
 | **Total if both built** | **6,145** | **36.1%** | **14.2%** |
 | Not replaceable | 10,864 | 63.9% | 25.1% |
 
 ### What This Means
 
-If source_sextant existed today, it would replace **~3,300 bash calls** (20% of
+If fledgling existed today, it would replace **~3,300 bash calls** (20% of
 all bash usage). Combined with a future safe-git server, that rises to
 **~6,100 calls** (36% of bash). The remaining 64% is build tools, runtime
 execution, GitHub CLI, and misc filesystem operations — things that genuinely
@@ -155,7 +155,7 @@ The JSONL records have a rich, queryable schema including:
 | P90 user msgs/session | 772 |
 | Max user msgs/session | 5,063 |
 
-## Implications for Source Sextant Design
+## Implications for Fledgling Design
 
 ### 1. Conversation Analysis is Viable and Valuable
 
@@ -179,9 +179,9 @@ SELECT block->>'name' as tool, block->'input' as params
 FROM blocks WHERE block->>'type' = 'tool_use'
 ```
 
-This should be pre-materialized as a macro or view in source_sextant.
+This should be pre-materialized as a macro or view in fledgling.
 
-### 3. Priority Order for Source Sextant Tools
+### 3. Priority Order for Fledgling Tools
 
 Based on actual usage data:
 
