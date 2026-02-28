@@ -94,7 +94,7 @@ def all_macros(con):
 
 
 @pytest.fixture(scope="session")
-def mcp_server():
+def mcp_server(tmp_path_factory):
     """MCP server with all tools published via memory transport.
 
     Session-scoped: all MCP tests share one connection since tools are
@@ -119,10 +119,29 @@ def mcp_server():
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    # Bootstrap conversation data for MCP tool tests.
+    # Write synthetic JSONL under a .claude/projects/ path so the
+    # project_dir regex in sessions() can extract the project name.
+    conv_dir = tmp_path_factory.mktemp("claude") / ".claude" / "projects" / "mcp-test-project"
+    conv_dir.mkdir(parents=True)
+    jsonl_path = conv_dir / "conversations.jsonl"
+    with open(jsonl_path, "w") as f:
+        for record in CONVERSATION_RECORDS:
+            f.write(json.dumps(record) + "\n")
+    con.execute(f"""
+        CREATE TABLE raw_conversations AS
+        SELECT *, filename AS _source_file
+        FROM read_json_auto(
+            '{jsonl_path}', union_by_name=true,
+            maximum_object_size=33554432, filename=true
+        )
+    """)
+    load_sql(con, "conversations.sql")
     # MCP tools (skip missing files so partial implementations work)
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
-                      "tools/docs.sql", "tools/git.sql"]:
+                      "tools/docs.sql", "tools/git.sql",
+                      "tools/conversations.sql"]:
         try:
             load_sql(con, tool_file)
         except FileNotFoundError:
