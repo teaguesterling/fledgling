@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "blq_mcp": {
+      "command": "blq",
+      "args": [
+        "mcp",
+        "serve"
+      ]
+    }
+  }
+}

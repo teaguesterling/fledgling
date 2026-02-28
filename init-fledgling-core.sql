@@ -13,6 +13,8 @@
 
 -- Lock down filesystem access (after all .read commands).
 -- session_root is always allowed; extras are appended if set.
+-- conversations_root is intentionally excluded: conversation data is
+-- materialized into raw_conversations at startup (a point-in-time snapshot).
 -- NOTE: This block is duplicated in each entry point because profile SQL
 -- must run before lock_configuration. Extract to sql/lockdown.sql if a
 -- third profile is added.
