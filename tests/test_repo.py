@@ -139,6 +139,85 @@ class TestFileAtVersion:
         assert "content" in col_names
 
 
+class TestFileChanges:
+    def test_returns_changed_files(self, repo_macros):
+        rows = repo_macros.execute(
+            "SELECT * FROM file_changes('HEAD~1', 'HEAD', ?)", [REPO_PATH]
+        ).fetchall()
+        assert len(rows) >= 1
+
+    def test_detects_status(self, repo_macros):
+        rows = repo_macros.execute(
+            "SELECT DISTINCT status FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchall()
+        statuses = {r[0] for r in rows}
+        assert statuses <= {"added", "deleted", "modified"}
+
+    def test_columns(self, repo_macros):
+        desc = repo_macros.execute(
+            "DESCRIBE SELECT * FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert "file_path" in col_names
+        assert "status" in col_names
+        assert "old_size" in col_names
+        assert "new_size" in col_names
+
+    def test_ordered_by_path(self, repo_macros):
+        rows = repo_macros.execute(
+            "SELECT file_path FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchall()
+        paths = [r[0] for r in rows]
+        assert paths == sorted(paths)
+
+
+class TestFileDiff:
+    def test_returns_diff_lines(self, repo_macros):
+        # Find a file that changed
+        changed = repo_macros.execute(
+            "SELECT file_path FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchone()
+        assert changed is not None, "No changed files between HEAD~1 and HEAD"
+        rows = repo_macros.execute(
+            "SELECT * FROM file_diff(?, 'HEAD~1', 'HEAD', ?)",
+            [changed[0], REPO_PATH],
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_diff_has_line_types(self, repo_macros):
+        changed = repo_macros.execute(
+            "SELECT file_path FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchone()
+        assert changed is not None
+        rows = repo_macros.execute(
+            "SELECT DISTINCT line_type FROM file_diff(?, 'HEAD~1', 'HEAD', ?)",
+            [changed[0], REPO_PATH],
+        ).fetchall()
+        line_types = {r[0] for r in rows}
+        # Should have at least one of add/remove/context (case TBD)
+        assert len(line_types) > 0
+
+    def test_columns(self, repo_macros):
+        changed = repo_macros.execute(
+            "SELECT file_path FROM file_changes('HEAD~1', 'HEAD', ?)",
+            [REPO_PATH],
+        ).fetchone()
+        assert changed is not None
+        desc = repo_macros.execute(
+            "DESCRIBE SELECT * FROM file_diff(?, 'HEAD~1', 'HEAD', ?)",
+            [changed[0], REPO_PATH],
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert "line_number" in col_names
+        assert "line_type" in col_names
+        assert "content" in col_names
+
+
 class TestCrossExtensionComposition:
     """Test that macros from different tiers compose in the same connection."""
 

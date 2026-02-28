@@ -28,3 +28,30 @@ SELECT mcp_publish_tool(
     '[]',
     'markdown'
 );
+
+SELECT mcp_publish_tool(
+    'GitDiffSummary',
+    'File-level summary of changes between two git revisions. Shows added, deleted, and modified files with sizes.',
+    'SELECT * FROM file_changes(
+        $from_rev,
+        $to_rev,
+        COALESCE(resolve(NULLIF($path, ''null'')), ''' || getvariable('session_root') || ''')
+    )',
+    '{"from_rev": {"type": "string", "description": "Base revision (e.g. HEAD~1, main, commit hash)"}, "to_rev": {"type": "string", "description": "Target revision (e.g. HEAD, feature-branch)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
+    '["from_rev", "to_rev"]',
+    'markdown'
+);
+
+SELECT mcp_publish_tool(
+    'GitDiffFile',
+    'Line-level unified diff for a specific file between two git revisions. Shows additions, removals, and context lines.',
+    'SELECT * FROM file_diff(
+        $file_path,
+        $from_rev,
+        $to_rev,
+        COALESCE(resolve(NULLIF($path, ''null'')), ''' || getvariable('session_root') || ''')
+    )',
+    '{"file_path": {"type": "string", "description": "Repository-relative file path (e.g. sql/repo.sql)"}, "from_rev": {"type": "string", "description": "Base revision (e.g. HEAD~1, main, commit hash)"}, "to_rev": {"type": "string", "description": "Target revision (e.g. HEAD, feature-branch)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
+    '["file_path", "from_rev", "to_rev"]',
+    'markdown'
+);

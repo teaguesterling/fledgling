@@ -79,3 +79,63 @@ CREATE OR REPLACE MACRO file_at_version(file, rev, repo := '.') AS TABLE
         size_bytes,
         text AS content
     FROM git_read(git_uri(repo, file, rev));
+
+-- file_changes: File-level summary of changes between two revisions.
+-- Compares git trees using blob_hash to detect modifications even when
+-- file sizes are unchanged. Like `git diff --stat`.
+--
+-- Examples:
+--   SELECT * FROM file_changes('HEAD~1', 'HEAD');
+--   SELECT * FROM file_changes('main', 'feature-branch', '/path/to/repo');
+CREATE OR REPLACE MACRO file_changes(from_rev, to_rev, repo := '.') AS TABLE
+    SELECT
+        COALESCE(a.file_path, b.file_path) AS file_path,
+        CASE
+            WHEN a.file_path IS NULL THEN 'added'
+            WHEN b.file_path IS NULL THEN 'deleted'
+            ELSE 'modified'
+        END AS status,
+        a.size_bytes AS old_size,
+        b.size_bytes AS new_size
+    FROM git_tree(repo, from_rev) a
+    FULL OUTER JOIN git_tree(repo, to_rev) b
+        ON a.file_path = b.file_path
+    WHERE a.file_path IS NULL
+       OR b.file_path IS NULL
+       OR a.blob_hash != b.blob_hash
+    ORDER BY file_path;
+
+-- file_diff: Line-level diff for a specific file between two revisions.
+-- Returns unified diff output parsed into individual lines with types.
+--
+-- Examples:
+--   SELECT * FROM file_diff('README.md', 'HEAD~1', 'HEAD');
+--   SELECT * FROM file_diff('src/main.py', 'main', 'feature', '/path/to/repo');
+CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := '.') AS TABLE
+    WITH raw_diff AS (
+        SELECT diff_text
+        FROM read_git_diff(
+            git_uri(repo, file, from_rev),
+            git_uri(repo, file, to_rev)
+        )
+    ),
+    lines AS (
+        SELECT unnest(string_split(diff_text, chr(10))) AS line
+        FROM raw_diff
+    ),
+    content_lines AS (
+        SELECT line FROM lines
+        WHERE length(line) > 0
+          AND NOT starts_with(line, '---')
+          AND NOT starts_with(line, '+++')
+          AND NOT starts_with(line, '@@')
+    )
+    SELECT
+        row_number() OVER () AS line_number,
+        CASE
+            WHEN starts_with(line, '+') THEN 'ADDED'
+            WHEN starts_with(line, '-') THEN 'REMOVED'
+            ELSE 'CONTEXT'
+        END AS line_type,
+        line[2:] AS content
+    FROM content_lines;
