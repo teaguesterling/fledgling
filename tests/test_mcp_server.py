@@ -7,12 +7,14 @@ is covered by tier-specific tests (test_source.py, test_code.py, etc.).
 Uses the repo itself as test data (dog-fooding).
 """
 
-import json
 import os
 
 import pytest
 
-from conftest import CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH
+from conftest import (
+    CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH, V1_TOOLS,
+    call_tool, list_tools, md_row_count,
+)
 
 # sitting_duck test data for multi-language coverage.
 # Set SITTING_DUCK_DATA env var to override the default path.
@@ -29,89 +31,6 @@ PY_SIMPLE = os.path.join(SITTING_DUCK_DATA, "python/simple.py")
 PY_IMPORTS = os.path.join(SITTING_DUCK_DATA, "python/imports.py")
 
 _has_sitting_duck_data = os.path.isdir(SITTING_DUCK_DATA)
-
-# The 16 V1 tools that should be published
-V1_TOOLS = [
-    "ListFiles",
-    "ReadLines",
-    "ReadAsTable",
-    "FindDefinitions",
-    "FindCalls",
-    "FindImports",
-    "CodeStructure",
-    "MDOutline",
-    "MDSection",
-    "GitChanges",
-    "GitBranches",
-    "Help",
-    "ChatSessions",
-    "ChatSearch",
-    "ChatToolUsage",
-    "ChatDetail",
-]
-
-
-# -- Helpers --
-
-
-def mcp_request(con, method, params=None):
-    """Send a JSON-RPC request to the MCP memory transport server."""
-    request = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params or {},
-    })
-    raw = con.execute(
-        "SELECT mcp_server_send_request(?)", [request]
-    ).fetchone()[0]
-    return json.loads(raw)
-
-
-def list_tools(con):
-    """Return the list of tool descriptors from the MCP server."""
-    resp = mcp_request(con, "tools/list")
-    return resp["result"]["tools"]
-
-
-_mcp_schemas_cache = {}
-
-
-def call_tool(con, tool_name, arguments=None):
-    """Call an MCP tool and return the text content.
-
-    Automatically fills missing optional parameters with null to work
-    around duckdb_mcp#19 (omitted params aren't substituted with NULL).
-    Tool SQL templates use NULLIF($param, 'null') to convert back.
-    """
-    args = dict(arguments or {})
-
-    # Auto-fill missing params with null using cached tool schemas.
-    # Keyed on connection id so multiple connections don't cross-pollinate.
-    con_id = id(con)
-    if con_id not in _mcp_schemas_cache:
-        _mcp_schemas_cache[con_id] = {
-            t["name"]: t["inputSchema"] for t in list_tools(con)
-        }
-    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
-    for prop in schema.get("properties", {}):
-        if prop not in args:
-            args[prop] = None
-
-    resp = mcp_request(con, "tools/call", {
-        "name": tool_name,
-        "arguments": args,
-    })
-    assert "error" not in resp, (
-        f"Tool {tool_name} error: {resp['error']['message']}"
-    )
-    return resp["result"]["content"][0]["text"]
-
-
-def md_row_count(text):
-    """Count data rows in a markdown table (excludes header + separator)."""
-    lines = [l for l in text.strip().split("\n") if l.strip().startswith("|")]
-    return max(0, len(lines) - 2)
 
 
 # -- Tool Discovery --
