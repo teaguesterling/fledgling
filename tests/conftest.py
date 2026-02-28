@@ -16,6 +16,7 @@ CLAUDE_PROJECTS_DIR = os.path.expanduser("~/.claude/projects")
 SPEC_PATH = os.path.join(PROJECT_ROOT, "docs/vision/PRODUCT_SPEC.md")
 ANALYSIS_PATH = os.path.join(PROJECT_ROOT, "docs/vision/CONVERSATION_ANALYSIS.md")
 CONFTEST_PATH = os.path.join(PROJECT_ROOT, "tests/conftest.py")
+SKILL_PATH = os.path.join(PROJECT_ROOT, "SKILL.md")
 REPO_PATH = PROJECT_ROOT
 
 
@@ -76,6 +77,29 @@ def repo_macros(con):
     return con
 
 
+def materialize_help(con):
+    """Create the _help_sections table from SKILL.md.
+
+    Uses absolute path so tests work regardless of CWD.
+    """
+    con.execute(f"""
+        CREATE TABLE _help_sections AS
+        SELECT section_id, section_path, level, title, content,
+               start_line, end_line
+        FROM read_markdown_sections('{SKILL_PATH}', content_mode := 'full',
+            include_content := true, include_filepath := false)
+    """)
+
+
+@pytest.fixture
+def help_macros(con):
+    """Connection with markdown extension + help macro + materialized SKILL.md."""
+    con.execute("LOAD markdown")
+    materialize_help(con)
+    load_sql(con, "help.sql")
+    return con
+
+
 @pytest.fixture
 def all_macros(con):
     """Connection with ALL extensions and ALL macros loaded.
@@ -90,6 +114,8 @@ def all_macros(con):
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    materialize_help(con)
+    load_sql(con, "help.sql")
     return con
 
 
@@ -119,10 +145,21 @@ def mcp_server():
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    # Help system (materialize before lockdown, same as init script)
+    skill_path = os.path.join(PROJECT_ROOT, "SKILL.md")
+    con.execute(f"""
+        CREATE TABLE _help_sections AS
+        SELECT section_id, section_path, level, title, content,
+               start_line, end_line
+        FROM read_markdown_sections('{skill_path}', content_mode := 'full',
+            include_content := true, include_filepath := false)
+    """)
+    load_sql(con, "help.sql")
     # MCP tools (skip missing files so partial implementations work)
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
-                      "tools/docs.sql", "tools/git.sql"]:
+                      "tools/docs.sql", "tools/git.sql",
+                      "tools/help.sql"]:
         try:
             load_sql(con, tool_file)
         except FileNotFoundError:
