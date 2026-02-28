@@ -23,17 +23,18 @@ Source Sextant replaces those bash commands with structured, composable SQL — 
 The key advantage is **composability**. Because everything lives in DuckDB, you can join across tiers:
 
 ```sql
--- Find all functions defined in files that changed in the last 3 commits
-SELECT d.name, d.file_path, c.message
+-- Definitions in large files — find code hotspots worth splitting up
+SELECT d.name, d.kind, d.file_path, f.line_count
 FROM find_definitions('src/**/*.py') d
-JOIN recent_changes(3) c ON d.file_path = c.file_name;
+JOIN file_line_count('src/**/*.py') f ON d.file_path = f.file_path
+WHERE f.line_count > 200;
 
--- Find documented functions that lack code examples in the docs
+-- Functions that lack code examples in the docs
 SELECT d.name, d.file_path
-FROM find_definitions('src/**/*.py', kind := 'function') d
+FROM find_definitions('src/**/*.py') d
 LEFT JOIN find_code_examples('docs/**/*.md', 'python') ex
   ON ex.code LIKE '%' || d.name || '%'
-WHERE ex.code IS NULL;
+WHERE d.kind = 'function' AND ex.code IS NULL;
 ```
 
 This kind of cross-cutting query is impossible with separate bash commands.
