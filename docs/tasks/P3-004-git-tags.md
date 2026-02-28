@@ -30,14 +30,14 @@ tagger, date, message, and whether the tag is annotated.
 
 ## Implementation
 
-Same pattern as `GitBranches` — no parameters, hardcode `sextant_root`
+Same pattern as `GitBranches` — no parameters, hardcode `session_root`
 at publish time:
 
 ```sql
 SELECT mcp_publish_tool(
     'GitTags',
     'List all tags with metadata. Shows tag name, commit hash, tagger, date, and whether annotated.',
-    'SELECT * FROM tag_list(''' || getvariable('sextant_root') || ''')',
+    'SELECT * FROM tag_list(''' || getvariable('session_root') || ''')',
     '{}',
     '[]',
     'markdown'

@@ -1,6 +1,6 @@
-"""Shared fixtures for source_sextant macro tests.
+"""Shared fixtures for fledgling macro tests.
 
-All tests use the source_sextant repo itself as test data (dog-fooding).
+All tests use the fledgling repo itself as test data (dog-fooding).
 """
 
 import json
@@ -102,7 +102,7 @@ def mcp_server():
     and resolve() for path sandboxing.
 
     Does NOT enable filesystem lockdown (enable_external_access = false)
-    because TestReadAsTable creates tmp_path files outside sextant_root.
+    because TestReadAsTable creates tmp_path files outside the project root.
     Lockdown is tested separately and enforced in the init script.
     """
     con = duckdb.connect(":memory:")
@@ -112,7 +112,7 @@ def mcp_server():
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
     # Sandbox: set root and load resolve() macro
-    con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
+    con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
     load_sql(con, "sandbox.sql")
     # Macros
     load_sql(con, "source.sql")

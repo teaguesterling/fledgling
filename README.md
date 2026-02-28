@@ -1,4 +1,4 @@
-# Source Sextant
+# Fledgling
 
 MCP tools that help AI agents get their bearings in a codebase — structured retrieval over code, git, docs, and conversations, powered by DuckDB.
 
@@ -8,9 +8,9 @@ AI coding agents retrieve data through shell commands. To find where `parse_conf
 
 Every one of these steps produces unstructured text the agent has to parse before it can reason about the answer. Tokens spent on text parsing are tokens not spent on solving your problem.
 
-## What Source Sextant Does
+## What Fledgling Does
 
-Source Sextant replaces shell-command-and-parse with purpose-built MCP tools that return structured results. Each tool is backed by a DuckDB community extension that understands the data format natively:
+Fledgling replaces shell-command-and-parse with purpose-built MCP tools that return structured results. Each tool is backed by a DuckDB community extension that understands the data format natively:
 
 | Capability | Replaces | Extension |
 |-----------|----------|-----------|
@@ -50,14 +50,14 @@ Returns structured rows with hash, author, date, and message.
 ```sql
 SELECT * FROM bash_commands() WHERE replaceable_by IS NOT NULL;
 ```
-Analyzes an agent's own bash usage to find commands Source Sextant could replace.
+Analyzes an agent's own bash usage to find commands Fledgling could replace.
 
 ## How It Works
 
-Source Sextant is a DuckDB init script. It loads extensions, defines SQL macros, publishes them as MCP tools, and starts a server:
+Fledgling is a DuckDB init script. It loads extensions, defines SQL macros, publishes them as MCP tools, and starts a server:
 
 ```
-duckdb -init init-source-sextant.sql
+duckdb -init init-fledgling.sql
 ```
 
 Configure it in Claude Code's `settings.json`:
@@ -65,15 +65,15 @@ Configure it in Claude Code's `settings.json`:
 ```json
 {
   "mcpServers": {
-    "source_sextant": {
+    "fledgling": {
       "command": "duckdb",
-      "args": ["-init", "/path/to/init-source-sextant.sql"]
+      "args": ["-init", "/path/to/init-fledgling.sql"]
     }
   }
 }
 ```
 
-Everything is read-only. Source Sextant retrieves and analyzes — it never modifies files or makes git writes.
+Everything is read-only. Fledgling retrieves and analyzes — it never modifies files or makes git writes.
 
 ## Status
 

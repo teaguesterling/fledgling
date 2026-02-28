@@ -1,4 +1,4 @@
--- Source Sextant: Repository Intelligence Macros (duck_tails)
+-- Fledgling: Repository Intelligence Macros (duck_tails)
 --
 -- Structured access to git repository state. Replaces git CLI
 -- commands with composable, queryable results.

@@ -41,7 +41,7 @@ class TestDocOutline:
         ).fetchall()
         ids = [r[0] for r in rows]
         assert "architecture" in ids
-        assert "what-is-source-sextant" in ids
+        assert "what-is-fledgling" in ids
 
     def test_multiple_files_via_glob(self, docs_macros):
         pattern = PROJECT_ROOT + "/docs/vision/*.md"

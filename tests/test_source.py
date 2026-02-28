@@ -31,7 +31,7 @@ class TestReadSource:
         rows = source_macros.execute(
             "SELECT content FROM read_source(?, '1')", [SPEC_PATH]
         ).fetchall()
-        assert "Source Sextant" in rows[0][0]
+        assert "Fledgling" in rows[0][0]
 
     def test_context_lines(self, source_macros):
         rows = source_macros.execute(

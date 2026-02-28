@@ -1,10 +1,10 @@
-# Source Sextant
+# Fledgling
 
 **MCP tools that help AI agents get their bearings in a codebase — unified SQL views over code, git, docs, and conversations, powered by DuckDB.**
 
-## What is Source Sextant?
+## What is Fledgling?
 
-Source Sextant is a DuckDB-powered [MCP](https://modelcontextprotocol.io/) server that gives AI agents navigational awareness of development environments. Instead of agents running bash commands (`cat`, `grep`, `git log`) that produce unstructured text, Source Sextant provides structured, composable SQL macros exposed as MCP tools.
+Fledgling is a DuckDB-powered [MCP](https://modelcontextprotocol.io/) server that gives AI agents navigational awareness of development environments. Instead of agents running bash commands (`cat`, `grep`, `git log`) that produce unstructured text, Fledgling provides structured, composable SQL macros exposed as MCP tools.
 
 It composes several DuckDB community extensions into a single queryable surface:
 
@@ -18,7 +18,7 @@ It composes several DuckDB community extensions into a single queryable surface:
 
 ## Why?
 
-AI coding assistants spend significant tokens on low-level bash commands for tasks that are fundamentally *data retrieval*. Source Sextant replaces those with structured, composable queries:
+AI coding assistants spend significant tokens on low-level bash commands for tasks that are fundamentally *data retrieval*. Fledgling replaces those with structured, composable queries:
 
 ```sql
 -- Instead of: cat src/parser.py | sed -n '40,50p'

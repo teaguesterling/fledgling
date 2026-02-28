@@ -1,18 +1,18 @@
--- Source Sextant: Init Script
+-- Fledgling: Init Script
 --
--- Entry point for: duckdb -init init-source-sextant.sql
+-- Entry point for: duckdb -init init-fledgling.sql
 --
 -- Loads extensions, configures sandbox, loads macros and tool
 -- publications, then starts the MCP server on stdio transport.
 --
 -- Usage:
---   duckdb -init /path/to/source-sextant/init-source-sextant.sql
+--   duckdb -init /path/to/fledgling/init-fledgling.sql
 --
--- The MCP client must set cwd to the source-sextant directory so
+-- The MCP client must set cwd to the fledgling directory so
 -- .read paths resolve correctly (they are relative to CWD, not to
 -- this init script). The target project root is passed separately
--- via the SEXTANT_PROJECT_ROOT environment variable, or by
--- pre-setting the sextant_root DuckDB variable.
+-- via the FLEDGLING_ROOT environment variable, or by
+-- pre-setting the session_root DuckDB variable.
 
 -- Suppress output during initialization
 .headers off
@@ -27,17 +27,17 @@ LOAD markdown;
 LOAD duck_tails;
 
 -- Capture project root before lockdown.
--- Priority: pre-set variable > SEXTANT_PROJECT_ROOT env var > CWD.
-SET VARIABLE sextant_root = COALESCE(
-    getvariable('sextant_root'),
-    NULLIF(getenv('SEXTANT_PROJECT_ROOT'), ''),
+-- Priority: pre-set variable > FLEDGLING_ROOT env var > CWD.
+SET VARIABLE session_root = COALESCE(
+    getvariable('session_root'),
+    NULLIF(getenv('FLEDGLING_ROOT'), ''),
     getenv('PWD')
 );
 
 -- Additional allowed directories (set before this point if needed).
--- Example: SET VARIABLE sextant_extra_dirs = ['/data/shared', '/opt/models'];
+-- Example: SET VARIABLE extra_dirs = ['/data/shared', '/opt/models'];
 
--- Path resolution macro (resolve relative paths against sextant_root)
+-- Path resolution macro (resolve relative paths against session_root)
 .read sql/sandbox.sql
 
 -- Load macro definitions
@@ -53,10 +53,10 @@ SET VARIABLE sextant_root = COALESCE(
 .read sql/tools/git.sql
 
 -- Lock down filesystem access (after all .read commands).
--- sextant_root is always allowed; extras are appended if set.
+-- session_root is always allowed; extras are appended if set.
 SET allowed_directories = list_concat(
-    [getvariable('sextant_root')],
-    COALESCE(getvariable('sextant_extra_dirs'), [])
+    [getvariable('session_root')],
+    COALESCE(getvariable('extra_dirs'), [])
 );
 SET enable_external_access = false;
 SET lock_configuration = true;

@@ -26,18 +26,18 @@ are user-facing, macro names follow SQL convention).
 
 ## Path Resolution
 
-Git tools use `sextant_root` as the default repo path (instead of `'.'`)
+Git tools use `session_root` as the default repo path (instead of `'.'`)
 so they work correctly under the sandbox. The `resolve()` macro is used
 for the optional `path` param on GitChanges.
 
 ```sql
--- GitBranches: no params, uses sextant_root directly
-SELECT * FROM branch_list(getvariable('sextant_root'))
+-- GitBranches: no params, uses session_root directly
+SELECT * FROM branch_list(getvariable('session_root'))
 
--- GitChanges: optional path defaults to sextant_root
+-- GitChanges: optional path defaults to session_root
 SELECT * FROM recent_changes(
     COALESCE(TRY_CAST(NULLIF($count, 'null') AS INT), 10),
-    COALESCE(resolve(NULLIF($path, 'null')), getvariable('sextant_root'))
+    COALESCE(resolve(NULLIF($path, 'null')), getvariable('session_root'))
 )
 ```
 

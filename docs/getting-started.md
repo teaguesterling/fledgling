@@ -12,11 +12,11 @@
 
 ## Installation
 
-Source Sextant is currently a collection of SQL macro files. To use it:
+Fledgling is currently a collection of SQL macro files. To use it:
 
 ```bash
 git clone https://github.com/teaguesterling/source-sextant.git
-cd source-sextant
+cd fledgling
 ```
 
 ## Usage with DuckDB
@@ -58,16 +58,16 @@ SELECT * FROM recent_changes(10);
 ## MCP Server Setup
 
 !!! note
-    8 of 11 MCP tools are published and tested (code, docs, git). The `init-source-sextant.sql` entry point and example config are still pending (P2-005).
+    8 of 11 MCP tools are published and tested (code, docs, git). The `init-fledgling.sql` entry point and example config are still pending (P2-005).
 
 Once the init script is ready, add to your Claude Code settings:
 
 ```json
 {
   "mcpServers": {
-    "source_sextant": {
+    "fledgling": {
       "command": "duckdb",
-      "args": ["-init", "/path/to/source-sextant/init-source-sextant.sql"]
+      "args": ["-init", "/path/to/fledgling/init-fledgling.sql"]
     }
   }
 }

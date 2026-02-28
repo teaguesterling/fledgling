@@ -1,11 +1,11 @@
 {
   "mcpServers": {
-    "source_sextant": {
+    "fledgling": {
       "command": "duckdb",
-      "args": ["-init", "init-source-sextant.sql"],
-      "cwd": "/absolute/path/to/source-sextant",
+      "args": ["-init", "init-fledgling.sql"],
+      "cwd": "/absolute/path/to/fledgling",
       "env": {
-        "SEXTANT_PROJECT_ROOT": "/path/to/your/project"
+        "FLEDGLING_ROOT": "/path/to/your/project"
       }
     }
   }

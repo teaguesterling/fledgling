@@ -16,7 +16,7 @@ def sandboxed():
     """Connection with sandbox.sql loaded and filesystem locked down."""
     con = duckdb.connect(":memory:")
     con.execute("LOAD read_lines")
-    con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
+    con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
     load_sql(con, "sandbox.sql")
     # Lock down filesystem
     con.execute(f"SET allowed_directories = ['{PROJECT_ROOT}']")
@@ -31,7 +31,7 @@ def unsandboxed():
     """Connection with sandbox.sql loaded but NO filesystem lockdown."""
     con = duckdb.connect(":memory:")
     con.execute("LOAD read_lines")
-    con.execute(f"SET VARIABLE sextant_root = '{PROJECT_ROOT}'")
+    con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
     load_sql(con, "sandbox.sql")
     yield con
     con.close()
@@ -69,21 +69,21 @@ class TestResolve:
         ).fetchone()[0]
         assert result == f"{PROJECT_ROOT}/../../../etc/passwd"
 
-    def test_sextant_root_is_set(self, unsandboxed):
+    def test_session_root_is_set(self, unsandboxed):
         result = unsandboxed.execute(
-            "SELECT getvariable('sextant_root')"
+            "SELECT getvariable('session_root')"
         ).fetchone()[0]
         assert result == PROJECT_ROOT
 
 
 class TestSandboxLockdown:
     def test_resolved_relative_path_allowed(self, sandboxed):
-        """Files inside sextant_root are readable via resolve()."""
+        """Files inside session_root are readable via resolve()."""
         rows = sandboxed.execute(
             "SELECT content FROM read_lines(resolve('README.md'), '1') LIMIT 1"
         ).fetchall()
         assert len(rows) == 1
-        assert "source-sextant" in rows[0][0].lower()
+        assert "fledgling" in rows[0][0].lower()
 
     def test_absolute_path_inside_root_allowed(self, sandboxed):
         rows = sandboxed.execute(

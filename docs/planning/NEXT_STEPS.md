@@ -1,4 +1,4 @@
-# Source Sextant: Next Steps
+# Fledgling: Next Steps
 
 **Last session**: 2026-02-26 (afternoon)
 **State**: 138 passing tests (13 expected failures pending P2-001), MCP tools published for code/docs/git
@@ -6,7 +6,7 @@
 ## What Exists
 
 ```
-source-sextant/
+fledgling/
   sql/
     source.sql          ✅ 4 macros, 13 tests
     code.sql            ✅ 4 macros, 13 tests
@@ -76,7 +76,7 @@ across 9 servers (aidr, blq, duckdb_mcp_test, lq, mess, Notion, context7,
 playwright, venv_blq).
 
 ### Project rename (2026-02-26 morning)
-Renamed from `duck_nest` to `source-sextant`.
+Renamed from `duck_nest` to `source-sextant`, then to `fledgling`.
 
 ### Documentation infrastructure (2026-02-26 morning)
 ReadTheDocs + mkdocs-material, macro reference pages, getting started guide.
@@ -97,7 +97,7 @@ See `docs/tasks/P2-001-files-tools.md` for full spec.
 
 - ✅ `sql/sandbox.sql` — path resolution and lockdown
 - ✅ `tests/conftest.py` — MCP server fixture with memory transport
-- ⚠️ `init-source-sextant.sql` — entry point for `duckdb -init` (not yet created)
+- ⚠️ `init-fledgling.sql` — entry point for `duckdb -init` (not yet created)
 - ⚠️ `config/claude-code.example.json` — example MCP config (not yet created)
 
 See `docs/tasks/P2-005-init-and-config.md` for full spec.
@@ -112,7 +112,7 @@ need to decide: auto-load from `~/.claude/projects/` on startup, or expose
 ## Phase 3: Polish and Iterate
 
 ### Trim settings.json bash whitelist
-Once source_sextant is running as MCP, start removing bash entries covered
+Once fledgling is running as MCP, start removing bash entries covered
 by MCP tools. The conversation analysis showed which ones:
 - `cat`, `head`, `tail` → `read_source`
 - `grep`, `find` → `find_definitions` / Grep tool
@@ -125,7 +125,7 @@ The conversation schema design doc has a blog outline. The data is compelling:
 tooling decisions.
 
 ### Per-project configuration
-Currently source_sextant is global. Consider how project-specific tools
+Currently fledgling is global. Consider how project-specific tools
 would work.
 
 ## Upstream Issues Filed
@@ -142,6 +142,6 @@ would work.
 
 ## Future: Safe Git MCP Server (Separate Project)
 
-Out of scope for source_sextant (which is read-only), but the conversation
+Out of scope for fledgling (which is read-only), but the conversation
 analysis showed 2,810 git write operations (16.5% of all bash). A
 separate server with safety guardrails.

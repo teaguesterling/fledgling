@@ -1,16 +1,16 @@
--- Source Sextant: Path Resolution & Sandbox Setup
+-- Fledgling: Path Resolution & Sandbox Setup
 --
 -- Sets up the resolve() macro for converting relative paths to absolute.
 -- Used by all tool SQL templates to work with DuckDB's allowed_directories.
 --
--- REQUIRES: sextant_root variable must be set before loading this file.
+-- REQUIRES: session_root variable must be set before loading this file.
 --
 -- From CLI (init script):
---   SET VARIABLE sextant_root = getenv('PWD');
+--   SET VARIABLE session_root = getenv('PWD');
 --   .read sql/sandbox.sql
 --
 -- From Python (tests):
---   con.execute("SET VARIABLE sextant_root = '/path/to/project'")
+--   con.execute("SET VARIABLE session_root = '/path/to/project'")
 --   load_sql(con, "sandbox.sql")
 --
 -- Filesystem lockdown (allowed_directories, enable_external_access)
@@ -26,5 +26,5 @@
 CREATE OR REPLACE MACRO resolve(p) AS
     CASE WHEN p IS NULL THEN NULL
          WHEN p[1] = '/' THEN p
-         ELSE getvariable('sextant_root') || '/' || p
+         ELSE getvariable('session_root') || '/' || p
     END;
