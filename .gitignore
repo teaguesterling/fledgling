@@ -4,3 +4,9 @@ dist/
 build/
 .pytest_cache/
 site/
+
+# blq
+.lq/*
+!.lq/hooks/
+!.lq/config.toml
+!.lq/commands.toml

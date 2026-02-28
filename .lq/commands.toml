@@ -1,0 +1,23 @@
+[commands.test]
+cmd = "pytest"
+description = "Run all tests. Use extra=[\"-v\"] for verbose, or extra=[\"tests/test_code.py\"] for a specific file."
+timeout = 120
+format = "pytest_text"
+
+[commands.test-file]
+tpl = "pytest tests/test_{tier}.py -v"
+description = "Run tests for a specific tier (source, code, docs, repo, conversations, sandbox, mcp_server, help)."
+timeout = 120
+format = "pytest_text"
+
+[commands.test-match]
+tpl = "pytest -k {pattern} -v"
+description = "Run tests matching a name pattern (pytest -k filtering)."
+timeout = 120
+format = "pytest_text"
+
+[commands.test-collect]
+cmd = "pytest --collect-only -q"
+description = "List all tests without running them. Useful for discovery."
+timeout = 30
+format = "pytest_text"
