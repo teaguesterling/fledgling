@@ -1,6 +1,6 @@
 # P3-003: GitShow Tool (File at Version)
 
-**Status:** Not started
+**Status:** Done
 **Depends on:** P2-004 (git tools), P2-005 (sandbox/resolve)
 **Estimated scope:** Tool publication only — macro already exists
 
