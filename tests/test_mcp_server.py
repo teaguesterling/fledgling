@@ -7,12 +7,14 @@ is covered by tier-specific tests (test_source.py, test_code.py, etc.).
 Uses the repo itself as test data (dog-fooding).
 """
 
-import json
 import os
 
 import pytest
 
-from conftest import CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH
+from conftest import (
+    CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH, V1_TOOLS,
+    call_tool, list_tools, md_row_count,
+)
 
 # sitting_duck test data for multi-language coverage.
 # Set SITTING_DUCK_DATA env var to override the default path.
@@ -29,87 +31,6 @@ PY_SIMPLE = os.path.join(SITTING_DUCK_DATA, "python/simple.py")
 PY_IMPORTS = os.path.join(SITTING_DUCK_DATA, "python/imports.py")
 
 _has_sitting_duck_data = os.path.isdir(SITTING_DUCK_DATA)
-
-# The 14 V1 tools that should be published
-V1_TOOLS = [
-    "ListFiles",
-    "ReadLines",
-    "ReadAsTable",
-    "FindDefinitions",
-    "FindCalls",
-    "FindImports",
-    "CodeStructure",
-    "MDOutline",
-    "MDSection",
-    "GitChanges",
-    "GitBranches",
-    "Help",
-    "GitDiffSummary",
-    "GitDiffFile",
-]
-
-
-# -- Helpers --
-
-
-def mcp_request(con, method, params=None):
-    """Send a JSON-RPC request to the MCP memory transport server."""
-    request = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params or {},
-    })
-    raw = con.execute(
-        "SELECT mcp_server_send_request(?)", [request]
-    ).fetchone()[0]
-    return json.loads(raw)
-
-
-def list_tools(con):
-    """Return the list of tool descriptors from the MCP server."""
-    resp = mcp_request(con, "tools/list")
-    return resp["result"]["tools"]
-
-
-_mcp_schemas_cache = {}
-
-
-def call_tool(con, tool_name, arguments=None):
-    """Call an MCP tool and return the text content.
-
-    Automatically fills missing optional parameters with null to work
-    around duckdb_mcp#19 (omitted params aren't substituted with NULL).
-    Tool SQL templates use NULLIF($param, 'null') to convert back.
-    """
-    args = dict(arguments or {})
-
-    # Auto-fill missing params with null using cached tool schemas.
-    # Keyed on connection id so multiple connections don't cross-pollinate.
-    con_id = id(con)
-    if con_id not in _mcp_schemas_cache:
-        _mcp_schemas_cache[con_id] = {
-            t["name"]: t["inputSchema"] for t in list_tools(con)
-        }
-    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
-    for prop in schema.get("properties", {}):
-        if prop not in args:
-            args[prop] = None
-
-    resp = mcp_request(con, "tools/call", {
-        "name": tool_name,
-        "arguments": args,
-    })
-    assert "error" not in resp, (
-        f"Tool {tool_name} error: {resp['error']['message']}"
-    )
-    return resp["result"]["content"][0]["text"]
-
-
-def md_row_count(text):
-    """Count data rows in a markdown table (excludes header + separator)."""
-    lines = [l for l in text.strip().split("\n") if l.strip().startswith("|")]
-    return max(0, len(lines) - 2)
 
 
 # -- Tool Discovery --
@@ -560,3 +481,112 @@ class TestGitDiff:
         assert md_row_count(text) > 0
         # Verify actual line type values appear in output
         assert any(t in text for t in ("ADDED", "REMOVED"))
+
+
+# -- Conversations --
+
+
+class TestChatSessions:
+    def test_returns_sessions(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSessions", {})
+        assert md_row_count(text) == 2
+
+    def test_limit_parameter(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSessions", {"limit": "1"})
+        assert md_row_count(text) == 1
+
+    def test_project_filter(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSessions", {"project": "mcp-test"})
+        assert md_row_count(text) == 2
+
+    def test_project_filter_no_match(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSessions", {
+            "project": "nonexistent-xyz",
+        })
+        assert md_row_count(text) == 0
+
+    def test_days_filter_wide_window(self, mcp_server):
+        """Large days value includes all synthetic data (2025 timestamps)."""
+        text = call_tool(mcp_server, "ChatSessions", {"days": "9999"})
+        assert md_row_count(text) == 2
+
+    def test_days_filter_narrow_window(self, mcp_server):
+        """Narrow days value excludes old synthetic data."""
+        text = call_tool(mcp_server, "ChatSessions", {"days": "1"})
+        assert md_row_count(text) == 0
+
+
+class TestChatSearch:
+    def test_finds_messages(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSearch", {"query": "fix the bug"})
+        assert md_row_count(text) >= 1
+        assert "fix" in text.lower()
+
+    def test_role_filter(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSearch", {
+            "query": "auth",
+            "role": "assistant",
+        })
+        rows = md_row_count(text)
+        assert rows >= 1
+        # All returned rows should be assistant role
+        data_lines = [
+            l for l in text.strip().split("\n")
+            if l.strip().startswith("|")
+        ][2:]
+        for line in data_lines:
+            assert "assistant" in line
+
+    def test_no_results(self, mcp_server):
+        text = call_tool(mcp_server, "ChatSearch", {
+            "query": "xyznonexistent999",
+        })
+        assert md_row_count(text) == 0
+
+    def test_days_filter(self, mcp_server):
+        text_wide = call_tool(mcp_server, "ChatSearch", {
+            "query": "auth", "days": "9999",
+        })
+        text_narrow = call_tool(mcp_server, "ChatSearch", {
+            "query": "auth", "days": "1",
+        })
+        assert md_row_count(text_wide) >= 1
+        assert md_row_count(text_narrow) == 0
+
+
+class TestChatToolUsage:
+    def test_returns_tool_counts(self, mcp_server):
+        text = call_tool(mcp_server, "ChatToolUsage", {})
+        assert md_row_count(text) >= 2  # At least Bash and Read
+        assert "Bash" in text
+        assert "Read" in text
+
+    def test_session_filter(self, mcp_server):
+        text = call_tool(mcp_server, "ChatToolUsage", {
+            "session_id": "sess-001",
+        })
+        assert md_row_count(text) >= 1
+        assert "Bash" in text
+        assert "Read" in text
+
+    def test_days_filter(self, mcp_server):
+        text_wide = call_tool(mcp_server, "ChatToolUsage", {"days": "9999"})
+        text_narrow = call_tool(mcp_server, "ChatToolUsage", {"days": "1"})
+        assert md_row_count(text_wide) >= 2
+        assert md_row_count(text_narrow) == 0
+
+
+class TestChatDetail:
+    def test_returns_session_detail(self, mcp_server):
+        text = call_tool(mcp_server, "ChatDetail", {
+            "session_id": "sess-001",
+        })
+        assert md_row_count(text) >= 1
+        assert "fix-auth" in text
+
+    def test_includes_tool_breakdown(self, mcp_server):
+        text = call_tool(mcp_server, "ChatDetail", {
+            "session_id": "sess-001",
+        })
+        assert "Bash" in text
+        assert "Read" in text

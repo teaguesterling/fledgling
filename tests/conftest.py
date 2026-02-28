@@ -119,17 +119,122 @@ def all_macros(con):
     return con
 
 
-@pytest.fixture(scope="session")
-def mcp_server():
-    """MCP server with all tools published via memory transport.
+# The 16 V1 custom tools that should be published in all profiles
+V1_TOOLS = [
+    "ListFiles",
+    "ReadLines",
+    "ReadAsTable",
+    "FindDefinitions",
+    "FindCalls",
+    "FindImports",
+    "CodeStructure",
+    "MDOutline",
+    "MDSection",
+    "GitChanges",
+    "GitBranches",
+    "Help",
+    "ChatSessions",
+    "ChatSearch",
+    "ChatToolUsage",
+    "ChatDetail",
+    "GitDiffSummary",
+    "GitDiffFile",
+]
 
-    Session-scoped: all MCP tests share one connection since tools are
-    read-only queries. Loads all extensions, macros, tool publications,
-    and resolve() for path sandboxing.
+
+# -- MCP test helpers --
+
+
+def mcp_request(con, method, params=None):
+    """Send a JSON-RPC request to the MCP memory transport server."""
+    request = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params or {},
+    })
+    raw = con.execute(
+        "SELECT mcp_server_send_request(?)", [request]
+    ).fetchone()[0]
+    return json.loads(raw)
+
+
+def list_tools(con):
+    """Return the list of tool descriptors from the MCP server."""
+    resp = mcp_request(con, "tools/list")
+    return resp["result"]["tools"]
+
+
+_mcp_schemas_cache = {}
+
+
+def call_tool(con, tool_name, arguments=None):
+    """Call an MCP tool and return the text content.
+
+    Automatically fills missing optional parameters with null to work
+    around duckdb_mcp#19 (omitted params aren't substituted with NULL).
+    Tool SQL templates use NULLIF($param, 'null') to convert back.
+    """
+    args = dict(arguments or {})
+
+    # Auto-fill missing params with null using cached tool schemas.
+    # Keyed on connection id so multiple connections don't cross-pollinate.
+    con_id = id(con)
+    if con_id not in _mcp_schemas_cache:
+        _mcp_schemas_cache[con_id] = {
+            t["name"]: t["inputSchema"] for t in list_tools(con)
+        }
+    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
+    for prop in schema.get("properties", {}):
+        if prop not in args:
+            args[prop] = None
+
+    resp = mcp_request(con, "tools/call", {
+        "name": tool_name,
+        "arguments": args,
+    })
+    assert "error" not in resp, (
+        f"Tool {tool_name} error: {resp['error']['message']}"
+    )
+    return resp["result"]["content"][0]["text"]
+
+
+def md_row_count(text):
+    """Count data rows in a markdown table (excludes header + separator)."""
+    lines = [l for l in text.strip().split("\n") if l.strip().startswith("|")]
+    return max(0, len(lines) - 2)
+
+
+# -- MCP server fixtures --
+
+
+def _write_conversation_jsonl(base_dir):
+    """Write synthetic JSONL under a .claude/projects/ path.
+
+    Returns the path to the JSONL file. The directory structure matches
+    the project_dir regex in sessions() so it can extract the project name.
+    """
+    conv_dir = base_dir / ".claude" / "projects" / "mcp-test-project"
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = conv_dir / "conversations.jsonl"
+    with open(jsonl_path, "w") as f:
+        for record in CONVERSATION_RECORDS:
+            f.write(json.dumps(record) + "\n")
+    return jsonl_path
+
+
+def _create_mcp_server(profile, conv_jsonl_path=None):
+    """Create an MCP server connection with the given profile.
+
+    Loads all extensions, macros, tool publications, then applies the
+    profile SQL (which sets mcp_server_options) and starts the server.
+
+    If conv_jsonl_path is provided, bootstraps raw_conversations from it.
+    Otherwise creates an empty raw_conversations table.
 
     Does NOT enable filesystem lockdown (enable_external_access = false)
-    because TestReadAsTable creates tmp_path files outside the project root.
-    Lockdown is tested separately and enforced in the init script.
+    because tests create tmp_path files outside the project root.
+    Lockdown is tested separately and enforced in the init scripts.
     """
     con = duckdb.connect(":memory:")
     # Extensions (must load before any sandbox lockdown)
@@ -145,28 +250,96 @@ def mcp_server():
     load_sql(con, "code.sql")
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
+    # Conversation data
+    if conv_jsonl_path:
+        con.execute(f"""
+            CREATE TABLE raw_conversations AS
+            SELECT *, filename AS _source_file
+            FROM read_json_auto(
+                '{conv_jsonl_path}', union_by_name=true,
+                maximum_object_size=33554432, filename=true
+            )
+        """)
+    else:
+        con.execute("""
+            CREATE TABLE raw_conversations AS
+            SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
+                   NULL::VARCHAR AS type,
+                   NULL::STRUCT(role VARCHAR, content JSON, model VARCHAR, id VARCHAR, stop_reason VARCHAR, usage STRUCT(input_tokens BIGINT, output_tokens BIGINT, cache_creation_input_tokens BIGINT, cache_read_input_tokens BIGINT)) AS message,
+                   NULL::TIMESTAMP AS timestamp, NULL::VARCHAR AS requestId,
+                   NULL::VARCHAR AS slug, NULL::VARCHAR AS version,
+                   NULL::VARCHAR AS gitBranch, NULL::VARCHAR AS cwd,
+                   NULL::BOOLEAN AS isSidechain, NULL::BOOLEAN AS isMeta,
+                   NULL::VARCHAR AS parentUuid, NULL::VARCHAR AS _source_file
+            WHERE false
+        """)
+    load_sql(con, "conversations.sql")
     # Help system (materialize before lockdown, same as init script)
-    skill_path = os.path.join(PROJECT_ROOT, "SKILL.md")
-    con.execute(f"""
-        CREATE TABLE _help_sections AS
-        SELECT section_id, section_path, level, title, content,
-               start_line, end_line
-        FROM read_markdown_sections('{skill_path}', content_mode := 'full',
-            include_content := true, include_filepath := false)
-    """)
+    materialize_help(con)
     load_sql(con, "help.sql")
     # MCP tools (skip missing files so partial implementations work)
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
                       "tools/docs.sql", "tools/git.sql",
+                      "tools/conversations.sql",
                       "tools/help.sql"]:
         try:
             load_sql(con, tool_file)
         except FileNotFoundError:
             pass
-    con.execute("SELECT mcp_server_start('memory')")
+    # Apply profile and start server
+    load_sql(con, profile)
+    con.execute(
+        "SELECT mcp_server_start('memory',"
+        " getvariable('mcp_server_options'))"
+    )
+    return con
+
+
+@pytest.fixture(scope="session")
+def mcp_server(tmp_path_factory):
+    """MCP server with analyst profile (all tools) via memory transport.
+
+    Session-scoped: all MCP tests share one connection since tools are
+    read-only queries. Analyst profile matches the default init-fledgling.sql
+    behavior (query, describe, list_tables enabled).
+    """
+    base_dir = tmp_path_factory.mktemp("mcp")
+    jsonl_path = _write_conversation_jsonl(base_dir)
+    con = _create_mcp_server("profiles/analyst.sql", conv_jsonl_path=jsonl_path)
     yield con
     con.close()
+
+
+def _list_tools_for_profile(profile):
+    """List MCP tools for a profile in a subprocess.
+
+    duckdb_mcp uses process-global server options, so a profile's tool
+    list can only be tested in isolation. This runs _create_mcp_server()
+    in a forked subprocess and returns the tool names.
+
+    Note: relies on conftest.py being importable as a regular Python module
+    (not just as a pytest plugin). This works because cwd=PROJECT_ROOT
+    and tests/ is on sys.path in the subprocess.
+    """
+    import subprocess
+    import sys
+    script = f"""
+import sys, json
+sys.path.insert(0, {os.path.join(PROJECT_ROOT, 'tests')!r})
+from conftest import _create_mcp_server, list_tools
+con = _create_mcp_server({profile!r})
+names = sorted(t["name"] for t in list_tools(con))
+print(json.dumps(names))
+con.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True, text=True, cwd=PROJECT_ROOT,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Subprocess failed: {result.stderr}")
+    return json.loads(result.stdout.strip())
 
 
 # -- Synthetic conversation data for conversation macro tests --

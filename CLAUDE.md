@@ -135,14 +135,16 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 - `con` — bare DuckDB connection
 - `<tier>_macros` — connection with one extension + one macro file
 - `all_macros` — all extensions + all macro files
-- `mcp_server` — session-scoped, all tools published, memory transport
+- `mcp_server` — session-scoped, analyst profile, memory transport
 - `conversation_macros` — synthetic JSONL data + conversation macros
 
-### MCP test helpers
+### MCP test helpers (conftest.py)
 
 - `call_tool(con, name, args)` — auto-fills missing params with `null`, asserts no error
 - `md_row_count(text)` — count data rows in markdown table output
 - `mcp_request(con, method, params)` — raw JSON-RPC to memory transport
+- `_create_mcp_server(profile)` — create a server connection with a given profile
+- `_list_tools_for_profile(profile)` — list tools in a subprocess (avoids duckdb_mcp global state)
 
 ### Test file loading
 
@@ -151,37 +153,54 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 ## File Organization
 
 ```
-init-fledgling.sql        Entry point for duckdb -init
+init-fledgling.sql          Default entry point (alias for analyst)
+init-fledgling-analyst.sql  Analyst profile entry point (query enabled)
+init-fledgling-core.sql     Core profile entry point (structured tools only)
+init-fledgling-base.sql     Shared setup (extensions, macros, tools)
 sql/
-  <tier>.sql              Macro definitions (one file per tier)
-  sandbox.sql             resolve() macro + sandbox setup
-  tools/<tier>.sql        Tool publications (one file per tier)
+  <tier>.sql                Macro definitions (one file per tier)
+  sandbox.sql               resolve() macro + sandbox setup
+  tools/<tier>.sql          Tool publications (one file per tier)
+  profiles/core.sql         Core profile: memory_limit + mcp_server_options
+  profiles/analyst.sql      Analyst profile: memory_limit + mcp_server_options
 config/
   claude-code.example.json  Example MCP server config
 tests/
-  conftest.py             Fixtures, helpers, synthetic data
-  test_<tier>.py          Macro tests (one file per tier)
-  test_mcp_server.py      MCP integration tests (all tools)
-  test_sandbox.py         Path resolution + lockdown tests
+  conftest.py               Fixtures, helpers, synthetic data
+  test_<tier>.py            Macro tests (one file per tier)
+  test_mcp_server.py        MCP integration tests (all tools)
+  test_profiles.py          Profile enforcement tests
+  test_sandbox.py           Path resolution + lockdown tests
 docs/
-  tasks/P<n>-<nnn>-*.md   Task plans with status tracking
+  tasks/P<n>-<nnn>-*.md    Task plans with status tracking
 ```
 
 ## Extension load order
 
+Per-profile entry points (e.g. `init-fledgling-analyst.sql`) compose the
+base script with a profile:
+
 ```
-1. LOAD duckdb_mcp                          (before lockdown; duckdb#17136)
-2. LOAD read_lines
-3. LOAD sitting_duck
-4. LOAD markdown
-5. LOAD duck_tails
-6. SET VARIABLE session_root = ...
-7. Load sandbox.sql                         (resolve() macro)
-8. Load macro files (source, code, docs, repo)
-9. Load tool publication files
-10. Filesystem lockdown                     (after all .read commands)
-11. Start MCP server
+init-fledgling-base.sql:
+  1. LOAD duckdb_mcp                        (before lockdown; duckdb#17136)
+  2. LOAD read_lines
+  3. LOAD sitting_duck
+  4. LOAD markdown
+  5. LOAD duck_tails
+  6. SET VARIABLE session_root = ...
+  7. Load sandbox.sql                       (resolve() macro)
+  8. Load macro files (source, code, docs, repo)
+  9. Load tool publication files
+
+Per-profile entry point (e.g. init-fledgling-analyst.sql):
+  10. Load profile SQL                      (memory_limit + mcp_server_options)
+  11. Filesystem lockdown                   (after all .read commands)
+  12. Start MCP server with profile options
 ```
+
+## DuckDB MCP Quirks
+
+10. **duckdb_mcp global server options** — `mcp_server_start()` uses process-global options. The first call in a process sets built-in tool visibility for all subsequent calls, regardless of connection. Profile tests use subprocess isolation (`_list_tools_for_profile()`) to work around this. Not an issue in production (each `duckdb -init` runs in its own process).
 
 <!-- blq:agent-instructions -->
 ## blq - Build Log Query
