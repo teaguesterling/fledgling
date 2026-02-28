@@ -18,7 +18,7 @@ from conftest import CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH
 # Set SITTING_DUCK_DATA env var to override the default path.
 SITTING_DUCK_DATA = os.environ.get(
     "SITTING_DUCK_DATA",
-    os.path.expanduser("~/Projects/sitting_duck/test/data"),
+    os.path.expanduser("~/Projects/sitting_duck/main/test/data"),
 )
 JS_SIMPLE = os.path.join(SITTING_DUCK_DATA, "javascript/simple.js")
 JS_IMPORTS = os.path.join(SITTING_DUCK_DATA, "javascript/imports.js")
