@@ -1,6 +1,20 @@
 """Tests for conversation analysis macros (conversations.sql)."""
 
+import duckdb
 import pytest
+
+from conftest import load_sql
+
+
+# The empty-table fallback schema from init-fledgling.sql. If macros evolve to
+# reference new columns from raw_conversations, this set (and the init script)
+# must be updated in lockstep.
+FALLBACK_SCHEMA_COLUMNS = {
+    "uuid", "sessionId", "type", "message", "timestamp", "requestId",
+    "slug", "version", "gitBranch", "cwd", "isSidechain", "isMeta",
+    "parentUuid", "_source_file",
+    "filename",  # added by read_json_auto(..., filename=true)
+}
 
 
 class TestLoadConversations:
@@ -265,3 +279,58 @@ class TestModelUsage:
         models = {r[0] for r in rows}
         assert "claude-sonnet-4-20250514" in models
         assert "claude-haiku-4-20250414" in models
+
+
+class TestFallbackSchema:
+    """Verify the empty-table fallback schema covers all columns macros need."""
+
+    def test_fallback_columns_cover_real_data(self, conversation_macros):
+        """Every column in populated raw_conversations is in the fallback set."""
+        desc = conversation_macros.execute(
+            "DESCRIBE SELECT * FROM raw_conversations"
+        ).fetchall()
+        real_columns = {r[0] for r in desc}
+        missing = real_columns - FALLBACK_SCHEMA_COLUMNS
+        assert not missing, (
+            f"Columns in real data but not in fallback schema: {missing}. "
+            f"Update FALLBACK_SCHEMA_COLUMNS and init-fledgling.sql ELSE branch."
+        )
+
+    def test_macros_work_with_empty_table(self):
+        """All conversation macros return empty results on an empty table.
+
+        Uses the same STRUCT type for message as init-fledgling.sql's empty
+        fallback. DuckDB resolves types through the macro chain at definition
+        time, so message must be a STRUCT (not bare JSON) for arithmetic in
+        token_usage() to bind.
+        """
+        con = duckdb.connect(":memory:")
+        con.execute("""
+            CREATE TABLE raw_conversations AS
+            SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
+                   NULL::VARCHAR AS type,
+                   NULL::STRUCT(role VARCHAR, content JSON, model VARCHAR,
+                       id VARCHAR, stop_reason VARCHAR,
+                       usage STRUCT(input_tokens BIGINT, output_tokens BIGINT,
+                           cache_creation_input_tokens BIGINT,
+                           cache_read_input_tokens BIGINT)) AS message,
+                   NULL::TIMESTAMP AS timestamp, NULL::VARCHAR AS requestId,
+                   NULL::VARCHAR AS slug, NULL::VARCHAR AS version,
+                   NULL::VARCHAR AS gitBranch, NULL::VARCHAR AS cwd,
+                   NULL::BOOLEAN AS isSidechain, NULL::BOOLEAN AS isMeta,
+                   NULL::VARCHAR AS parentUuid, NULL::VARCHAR AS _source_file
+            WHERE false
+        """)
+        load_sql(con, "conversations.sql")
+        for macro in ["sessions", "messages", "content_blocks", "tool_calls",
+                       "tool_results", "token_usage", "tool_frequency",
+                       "bash_commands", "session_summary", "model_usage"]:
+            rows = con.execute(f"SELECT count(*) FROM {macro}()").fetchone()
+            assert rows[0] == 0, f"{macro}() failed on empty table"
+        # search macros require an argument
+        for macro in ["search_messages", "search_tool_inputs"]:
+            rows = con.execute(
+                f"SELECT count(*) FROM {macro}('test')"
+            ).fetchone()
+            assert rows[0] == 0, f"{macro}() failed on empty table"
+        con.close()

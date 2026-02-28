@@ -513,6 +513,16 @@ class TestChatSessions:
         })
         assert md_row_count(text) == 0
 
+    def test_days_filter_wide_window(self, mcp_server):
+        """Large days value includes all synthetic data (2025 timestamps)."""
+        text = call_tool(mcp_server, "ChatSessions", {"days": "9999"})
+        assert md_row_count(text) == 2
+
+    def test_days_filter_narrow_window(self, mcp_server):
+        """Narrow days value excludes old synthetic data."""
+        text = call_tool(mcp_server, "ChatSessions", {"days": "1"})
+        assert md_row_count(text) == 0
+
 
 class TestChatSearch:
     def test_finds_messages(self, mcp_server):
@@ -541,6 +551,16 @@ class TestChatSearch:
         })
         assert md_row_count(text) == 0
 
+    def test_days_filter(self, mcp_server):
+        text_wide = call_tool(mcp_server, "ChatSearch", {
+            "query": "auth", "days": "9999",
+        })
+        text_narrow = call_tool(mcp_server, "ChatSearch", {
+            "query": "auth", "days": "1",
+        })
+        assert md_row_count(text_wide) >= 1
+        assert md_row_count(text_narrow) == 0
+
 
 class TestChatToolUsage:
     def test_returns_tool_counts(self, mcp_server):
@@ -556,6 +576,12 @@ class TestChatToolUsage:
         assert md_row_count(text) >= 1
         assert "Bash" in text
         assert "Read" in text
+
+    def test_days_filter(self, mcp_server):
+        text_wide = call_tool(mcp_server, "ChatToolUsage", {"days": "9999"})
+        text_narrow = call_tool(mcp_server, "ChatToolUsage", {"days": "1"})
+        assert md_row_count(text_wide) >= 2
+        assert md_row_count(text_narrow) == 0
 
 
 class TestChatDetail:

@@ -58,6 +58,9 @@ SET VARIABLE conversations_root = COALESCE(
 -- DuckDB validates table refs at macro definition time).
 -- Uses query() for conditional dispatch: loads JSONL if files exist, otherwise
 -- creates an empty table with the expected schema.
+-- NOTE: The ELSE branch schema must match the columns that conversations.sql
+-- macros reference from raw_conversations. If macros evolve to use new columns,
+-- update the fallback schema here in lockstep.
 CREATE TABLE raw_conversations AS
 SELECT * FROM query(
     CASE WHEN (SELECT count(*) FROM glob(
@@ -68,7 +71,8 @@ SELECT * FROM query(
         union_by_name=true, maximum_object_size=33554432, filename=true
     )'
     ELSE 'SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
-          NULL::VARCHAR AS type, NULL::JSON AS message,
+          NULL::VARCHAR AS type,
+          NULL::STRUCT(role VARCHAR, content JSON, model VARCHAR, id VARCHAR, stop_reason VARCHAR, usage STRUCT(input_tokens BIGINT, output_tokens BIGINT, cache_creation_input_tokens BIGINT, cache_read_input_tokens BIGINT)) AS message,
           NULL::TIMESTAMP AS timestamp, NULL::VARCHAR AS requestId,
           NULL::VARCHAR AS slug, NULL::VARCHAR AS version,
           NULL::VARCHAR AS gitBranch, NULL::VARCHAR AS cwd,
@@ -88,6 +92,10 @@ SELECT * FROM query(
 
 -- Lock down filesystem access (after all .read commands).
 -- session_root is always allowed; extras are appended if set.
+-- conversations_root is intentionally excluded: conversation data is
+-- materialized into raw_conversations above (a point-in-time snapshot).
+-- The load_conversations() macro is not usable post-lockdown; refreshing
+-- conversation data requires restarting the server.
 SET allowed_directories = list_concat(
     [getvariable('session_root')],
     COALESCE(getvariable('extra_dirs'), [])
