@@ -10,7 +10,7 @@ When an agent wants "all function definitions matching `parse` in files that cha
 
 ## What Source Sextant Does
 
-Source Sextant replaces those bash commands with structured, composable SQL — exposed as MCP tools that any agent can call directly. It composes five DuckDB community extensions into a single queryable surface:
+Source Sextant gives agents purpose-built MCP tools backed by structured SQL, so they spend tokens on reasoning instead of parsing text. It composes five DuckDB community extensions into a single queryable surface:
 
 | Capability | Replaces | Extension |
 |-----------|----------|-----------|
@@ -20,7 +20,7 @@ Source Sextant replaces those bash commands with structured, composable SQL — 
 | **Repository** — query commits, branches, tags, file history | `git log`, `git diff`, `git show` | [`duck_tails`](https://github.com/teaguesterling/duck_tails) |
 | **Conversations** — analyze Claude Code session history, tool usage, token costs | *(nothing — this capability didn't exist)* | DuckDB JSON |
 
-The key advantage is **composability**. Because everything lives in DuckDB, you can join across tiers:
+Because everything shares a DuckDB connection, tiers also compose through SQL joins:
 
 ```sql
 -- Definitions in large files — find code hotspots worth splitting up
@@ -28,16 +28,7 @@ SELECT d.name, d.kind, d.file_path, f.line_count
 FROM find_definitions('src/**/*.py') d
 JOIN file_line_count('src/**/*.py') f ON d.file_path = f.file_path
 WHERE f.line_count > 200;
-
--- Functions that lack code examples in the docs
-SELECT d.name, d.file_path
-FROM find_definitions('src/**/*.py') d
-LEFT JOIN find_code_examples('docs/**/*.md', 'python') ex
-  ON ex.code LIKE '%' || d.name || '%'
-WHERE d.kind = 'function' AND ex.code IS NULL;
 ```
-
-This kind of cross-cutting query is impossible with separate bash commands.
 
 ## How It Works
 
