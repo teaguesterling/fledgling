@@ -93,17 +93,97 @@ def all_macros(con):
     return con
 
 
-@pytest.fixture(scope="session")
-def mcp_server():
-    """MCP server with all tools published via memory transport.
+# The 11 V1 custom tools that should be published in all profiles
+V1_TOOLS = [
+    "ListFiles",
+    "ReadLines",
+    "ReadAsTable",
+    "FindDefinitions",
+    "FindCalls",
+    "FindImports",
+    "CodeStructure",
+    "MDOutline",
+    "MDSection",
+    "GitChanges",
+    "GitBranches",
+]
 
-    Session-scoped: all MCP tests share one connection since tools are
-    read-only queries. Loads all extensions, macros, tool publications,
-    and resolve() for path sandboxing.
+
+# -- MCP test helpers --
+
+
+def mcp_request(con, method, params=None):
+    """Send a JSON-RPC request to the MCP memory transport server."""
+    request = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params or {},
+    })
+    raw = con.execute(
+        "SELECT mcp_server_send_request(?)", [request]
+    ).fetchone()[0]
+    return json.loads(raw)
+
+
+def list_tools(con):
+    """Return the list of tool descriptors from the MCP server."""
+    resp = mcp_request(con, "tools/list")
+    return resp["result"]["tools"]
+
+
+_mcp_schemas_cache = {}
+
+
+def call_tool(con, tool_name, arguments=None):
+    """Call an MCP tool and return the text content.
+
+    Automatically fills missing optional parameters with null to work
+    around duckdb_mcp#19 (omitted params aren't substituted with NULL).
+    Tool SQL templates use NULLIF($param, 'null') to convert back.
+    """
+    args = dict(arguments or {})
+
+    # Auto-fill missing params with null using cached tool schemas.
+    # Keyed on connection id so multiple connections don't cross-pollinate.
+    con_id = id(con)
+    if con_id not in _mcp_schemas_cache:
+        _mcp_schemas_cache[con_id] = {
+            t["name"]: t["inputSchema"] for t in list_tools(con)
+        }
+    schema = _mcp_schemas_cache[con_id].get(tool_name, {})
+    for prop in schema.get("properties", {}):
+        if prop not in args:
+            args[prop] = None
+
+    resp = mcp_request(con, "tools/call", {
+        "name": tool_name,
+        "arguments": args,
+    })
+    assert "error" not in resp, (
+        f"Tool {tool_name} error: {resp['error']['message']}"
+    )
+    return resp["result"]["content"][0]["text"]
+
+
+def md_row_count(text):
+    """Count data rows in a markdown table (excludes header + separator)."""
+    lines = [l for l in text.strip().split("\n") if l.strip().startswith("|")]
+    return max(0, len(lines) - 2)
+
+
+# -- MCP server fixtures --
+
+
+def _create_mcp_server(profile):
+    """Create an MCP server connection with the given profile.
+
+    Loads all extensions, macros, tool publications, then applies the
+    profile SQL (which sets mcp_server_options) and starts the server.
 
     Does NOT enable filesystem lockdown (enable_external_access = false)
-    because TestReadAsTable creates tmp_path files outside the project root.
-    Lockdown is tested separately and enforced in the init script.
+    because tests create tmp_path files outside the project root.
+    Lockdown is tested separately and enforced in the init scripts.
     """
     con = duckdb.connect(":memory:")
     # Extensions (must load before any sandbox lockdown)
@@ -127,9 +207,53 @@ def mcp_server():
             load_sql(con, tool_file)
         except FileNotFoundError:
             pass
-    con.execute("SELECT mcp_server_start('memory')")
+    # Apply profile and start server
+    load_sql(con, profile)
+    con.execute(
+        "SELECT mcp_server_start('memory',"
+        " getvariable('mcp_server_options'))"
+    )
+    return con
+
+
+@pytest.fixture(scope="session")
+def mcp_server():
+    """MCP server with analyst profile (all tools) via memory transport.
+
+    Session-scoped: all MCP tests share one connection since tools are
+    read-only queries. Analyst profile matches the default init-fledgling.sql
+    behavior (query, describe, list_tables enabled).
+    """
+    con = _create_mcp_server("profiles/analyst.sql")
     yield con
     con.close()
+
+
+def _list_tools_for_profile(profile):
+    """List MCP tools for a profile in a subprocess.
+
+    duckdb_mcp uses process-global server options, so a profile's tool
+    list can only be tested in isolation. This runs _create_mcp_server()
+    in a forked subprocess and returns the tool names.
+    """
+    import subprocess
+    import sys
+    script = f"""
+import sys, json
+sys.path.insert(0, {os.path.join(PROJECT_ROOT, 'tests')!r})
+from conftest import _create_mcp_server, list_tools
+con = _create_mcp_server({profile!r})
+names = sorted(t["name"] for t in list_tools(con))
+print(json.dumps(names))
+con.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True, text=True, cwd=PROJECT_ROOT,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Subprocess failed: {result.stderr}")
+    return json.loads(result.stdout.strip())
 
 
 # -- Synthetic conversation data for conversation macro tests --
