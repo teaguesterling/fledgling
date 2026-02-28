@@ -1,7 +1,7 @@
 """Tests for security profile enforcement.
 
 Verifies that core and analyst profiles correctly control which built-in
-tools are available while all 11 custom tools remain present in both.
+tools are available while all custom tools remain present in both.
 
 Note: duckdb_mcp uses process-global server options. The first call to
 mcp_server_start() in a process sets built-in tool visibility for all
@@ -129,7 +129,7 @@ class TestProfileIsolation:
             assert tool in core_names, f"Core missing: {tool}"
 
     def test_exact_custom_tool_count(self):
-        """Core should have exactly 11 tools (no builtins)."""
+        """Core should have exactly the custom tools (no builtins)."""
         names = _list_tools_for_profile("profiles/core.sql")
         assert len(names) == len(V1_TOOLS), (
             f"Expected {len(V1_TOOLS)} tools, got {len(names)}: {names}"

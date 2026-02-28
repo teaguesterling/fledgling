@@ -409,3 +409,17 @@ class TestGitBranches:
     def test_lists_branches(self, mcp_server):
         text = call_tool(mcp_server, "GitBranches", {})
         assert md_row_count(text) > 0
+
+
+# -- Help --
+
+
+class TestHelp:
+    def test_outline_returns_sections(self, mcp_server):
+        text = call_tool(mcp_server, "Help", {})
+        assert md_row_count(text) > 5
+
+    def test_section_returns_content(self, mcp_server):
+        text = call_tool(mcp_server, "Help", {"section": "workflows"})
+        assert "workflows" in text.lower()
+        assert md_row_count(text) >= 1

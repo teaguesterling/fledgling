@@ -15,6 +15,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: SQL",
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
 ]
 
 [project.urls]
