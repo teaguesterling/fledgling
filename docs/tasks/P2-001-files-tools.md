@@ -1,6 +1,6 @@
 # P2-001: Files Tools (ListFiles, ReadLines, ReadAsTable)
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** None (can be implemented first)
 **Estimated scope:** New macros + tool publications
 

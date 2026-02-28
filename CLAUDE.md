@@ -115,6 +115,10 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 
 7. **LATERAL UNNEST in macros** — Evaluates before WHERE with mixed-type JSON. Use CTEs to filter first.
 
+8. **`query_table()` Python collision** — DuckDB's `query_table()` uses Python replacement scans, which collide with `import json`. Use `read_json_auto()`/`read_csv_auto()` with `query()` for dynamic dispatch instead.
+
+9. **Table functions in UNION ALL dead branches** — Table functions like `glob()` may execute even in UNION ALL branches filtered by `WHERE false`, especially in the duckdb_mcp execution context. Use `query()` for conditional table function dispatch.
+
 ## Tests
 
 ### Philosophy
