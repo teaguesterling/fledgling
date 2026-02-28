@@ -1,6 +1,6 @@
 # P3-001: GitDiff Tool
 
-**Status:** Not started
+**Status:** Implemented
 **Depends on:** P2-004 (git tools), P2-005 (sandbox/resolve)
 **Estimated scope:** New macro + tool publication
 
@@ -71,16 +71,15 @@ SELECT * FROM text_diff_lines(
 )
 ```
 
-### Open questions
+### Resolved questions
 
-- Should the file summary compare by content hash rather than size? Two files
-  can have the same size but different content. `git_tree` doesn't expose the
-  blob hash, so this may require `read_git_diff` per file (expensive for large
-  repos). Alternatively, accept the false-negative rate as a tradeoff.
-- Should there be a `context` parameter (like `git diff -U3`) for the
-  line-level view? `text_diff_lines` may not support this.
-- The `read_git_diff` function returns an error when given directory paths
-  rather than file paths. Need to verify behavior with binary files.
+- **blob_hash**: `git_tree` does expose `blob_hash`. The implementation uses it
+  for accurate modification detection (not size comparison).
+- **`text_diff_lines()` limitation**: Cannot accept column references or
+  subqueries inside macros. Worked around with pure SQL parsing using
+  `unnest(string_split())`. See CLAUDE.md DuckDB Quirks #8.
+- **Context parameter**: Deferred to future work. `read_git_diff` returns all
+  context lines by default.
 
 ## Tools
 

@@ -115,6 +115,8 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 
 7. **LATERAL UNNEST in macros** — Evaluates before WHERE with mixed-type JSON. Use CTEs to filter first.
 
+8. **C++ table functions reject column refs in macros** — `text_diff_lines(r.col)` fails with "does not support lateral join column parameters". Subqueries also rejected. Workaround: reimplement in pure SQL (e.g., `unnest(string_split())` + CASE).
+
 ## Tests
 
 ### Philosophy

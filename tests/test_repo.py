@@ -199,8 +199,8 @@ class TestFileDiff:
             [changed[0], REPO_PATH],
         ).fetchall()
         line_types = {r[0] for r in rows}
-        # Should have at least one of add/remove/context (case TBD)
-        assert len(line_types) > 0
+        assert line_types <= {"ADDED", "REMOVED", "CONTEXT"}
+        assert line_types & {"ADDED", "REMOVED"}  # diff must have changes
 
     def test_columns(self, repo_macros):
         changed = repo_macros.execute(
@@ -213,7 +213,7 @@ class TestFileDiff:
             [changed[0], REPO_PATH],
         ).fetchall()
         col_names = [r[0] for r in desc]
-        assert "line_number" in col_names
+        assert "seq" in col_names
         assert "line_type" in col_names
         assert "content" in col_names
 

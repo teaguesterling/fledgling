@@ -542,5 +542,6 @@ class TestGitDiff:
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
-        # Should contain line type indicators in the output
         assert md_row_count(text) > 0
+        # Verify actual line type values appear in output
+        assert any(t in text for t in ("ADDED", "REMOVED"))

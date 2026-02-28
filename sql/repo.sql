@@ -106,7 +106,7 @@ CREATE OR REPLACE MACRO file_changes(from_rev, to_rev, repo := '.') AS TABLE
     ORDER BY file_path;
 
 -- file_diff: Line-level diff for a specific file between two revisions.
--- Returns unified diff output parsed into individual lines with types.
+-- Parses diff content lines from read_git_diff into typed rows.
 --
 -- Examples:
 --   SELECT * FROM file_diff('README.md', 'HEAD~1', 'HEAD');
@@ -122,20 +122,14 @@ CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := '.') AS TABLE
     lines AS (
         SELECT unnest(string_split(diff_text, chr(10))) AS line
         FROM raw_diff
-    ),
-    content_lines AS (
-        SELECT line FROM lines
-        WHERE length(line) > 0
-          AND NOT starts_with(line, '---')
-          AND NOT starts_with(line, '+++')
-          AND NOT starts_with(line, '@@')
     )
     SELECT
-        row_number() OVER () AS line_number,
+        row_number() OVER () AS seq,
         CASE
             WHEN starts_with(line, '+') THEN 'ADDED'
             WHEN starts_with(line, '-') THEN 'REMOVED'
             ELSE 'CONTEXT'
         END AS line_type,
         line[2:] AS content
-    FROM content_lines;
+    FROM lines
+    WHERE length(line) > 0;
