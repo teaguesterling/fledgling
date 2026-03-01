@@ -14,7 +14,7 @@ SELECT mcp_publish_tool(
      WHERE (NULLIF($project, ''null'') IS NULL
             OR project_dir ILIKE ''%'' || NULLIF($project, ''null'') || ''%'')
        AND (NULLIF($days, ''null'') IS NULL
-            OR started_at >= CURRENT_TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
+            OR started_at >= CURRENT_TIMESTAMP::TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
      ORDER BY started_at DESC
      LIMIT COALESCE(TRY_CAST(NULLIF($limit, ''null'') AS INT), 20)',
     '{"project": {"type": "string", "description": "Substring match on project directory name (case-insensitive)"}, "days": {"type": "string", "description": "Only sessions from last N days"}, "limit": {"type": "string", "description": "Max rows returned (default 20)"}}',
@@ -34,7 +34,7 @@ SELECT mcp_publish_tool(
        AND (NULLIF($project, ''null'') IS NULL
             OR s.project_dir ILIKE ''%'' || NULLIF($project, ''null'') || ''%'')
        AND (NULLIF($days, ''null'') IS NULL
-            OR sm.created_at >= CURRENT_TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
+            OR sm.created_at >= CURRENT_TIMESTAMP::TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
      ORDER BY sm.created_at DESC
      LIMIT COALESCE(TRY_CAST(NULLIF($limit, ''null'') AS INT), 20)',
     '{"query": {"type": "string", "description": "Search term (case-insensitive substring match)"}, "role": {"type": "string", "description": "Filter to user or assistant messages"}, "project": {"type": "string", "description": "Substring match on project directory name"}, "days": {"type": "string", "description": "Only messages from last N days"}, "limit": {"type": "string", "description": "Max rows returned (default 20)"}}',
@@ -57,7 +57,7 @@ SELECT mcp_publish_tool(
        AND (NULLIF($session_id, ''null'') IS NULL
             OR tf.session_id = NULLIF($session_id, ''null''))
        AND (NULLIF($days, ''null'') IS NULL
-            OR tf.first_used >= CURRENT_TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
+            OR tf.first_used >= CURRENT_TIMESTAMP::TIMESTAMP - (NULLIF($days, ''null'') || '' days'')::INTERVAL)
      GROUP BY tf.tool_name
      ORDER BY total_calls DESC
      LIMIT COALESCE(TRY_CAST(NULLIF($limit, ''null'') AS INT), 50)',

@@ -50,17 +50,21 @@ SET VARIABLE conversations_root = COALESCE(
 -- DuckDB validates table refs at macro definition time).
 -- Uses query() for conditional dispatch: loads JSONL if files exist, otherwise
 -- creates an empty table with the expected schema.
+-- Checks file existence via a variable to avoid subqueries inside query()
+-- (DuckDB table functions cannot contain subqueries).
 -- NOTE: The ELSE branch schema must match the columns that conversations.sql
 -- macros reference from raw_conversations. If macros evolve to use new columns,
 -- update the fallback schema here in lockstep.
+SET VARIABLE _has_conversations = (SELECT count(*) > 0 FROM glob(
+    getvariable('conversations_root') || '/*/*.jsonl'
+));
 CREATE TABLE raw_conversations AS
-SELECT * FROM query(
-    CASE WHEN (SELECT count(*) FROM glob(
-        getvariable('conversations_root') || '/*/*.jsonl'
-    )) > 0
+SELECT * REPLACE (CAST(timestamp AS TIMESTAMP) AS timestamp) FROM query(
+    CASE WHEN getvariable('_has_conversations')
     THEN 'SELECT *, filename AS _source_file FROM read_json_auto(
         ''' || getvariable('conversations_root') || '/*/*.jsonl'',
-        union_by_name=true, maximum_object_size=33554432, filename=true
+        union_by_name=true, maximum_object_size=33554432, filename=true,
+        ignore_errors=true
     )'
     ELSE 'SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
           NULL::VARCHAR AS type,

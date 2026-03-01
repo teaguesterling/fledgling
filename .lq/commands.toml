@@ -21,3 +21,9 @@ cmd = "pytest --collect-only -q"
 description = "List all tests without running them. Useful for discovery."
 timeout = 30
 format = "pytest_text"
+
+[commands.fledgling-tool]
+tpl = "python scripts/call_tool.py {tool}"
+description = "Call a Fledgling MCP tool. Use extra=[...] for tool arguments as key=value pairs."
+timeout = 30
+format = "generic"
