@@ -91,9 +91,10 @@ Test that tools handle empty results gracefully:
 2. Use FindDefinitions on sql/sandbox.sql with name_pattern=nonexistent_%
 3. Use MDOutline on sql/sandbox.sql (not a markdown file)
 
-Expected: All three should return empty result tables (headers but no
-data rows), not errors. Tools should degrade gracefully when given
-valid but unmatched inputs.
+Expected: Steps 1 and 2 return empty result tables (headers but no
+data rows), not errors. Step 3 returns an error ("File is not a markdown
+file") — this is correct behavior since a SQL file is an invalid input
+type for markdown parsing, not a valid-but-unmatched input.
 ```
 
 ### 8.7 Large result sets

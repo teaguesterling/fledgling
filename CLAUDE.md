@@ -200,6 +200,10 @@ Per-profile entry point (e.g. init-fledgling-analyst.sql):
 
 10. **duckdb_mcp global server options** — `mcp_server_start()` uses process-global options. The first call in a process sets built-in tool visibility for all subsequent calls, regardless of connection. Profile tests use subprocess isolation (`_list_tools_for_profile()`) to work around this. Not an issue in production (each `duckdb -init` runs in its own process).
 
+11. **duck_tails git:// URIs and allowed_directories** — `duck_tails` resolves `git://` URIs to repo-relative paths internally, so `allowed_directories` sees `git://path/to/file` not the full absolute URI. Only the bare `git://` prefix works as an allowed directory. This is safe given `enable_external_access = false` prevents network access.
+
+12. **duckdb_mcp query tool is not read-only** — The built-in query tool (duckdb_mcp#34) does not enforce read-only access. DDL/DML like `CREATE TABLE` succeeds. `access_mode = 'read_only'` cannot be set after database open. Fix must happen in duckdb_mcp's query tool handler.
+
 <!-- blq:agent-instructions -->
 ## blq - Build Log Query
 
