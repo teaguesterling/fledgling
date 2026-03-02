@@ -16,11 +16,19 @@
 --   SELECT * FROM read_source('src/main.py', '42 +/-5');
 --   SELECT * FROM read_source('src/main.py', match := 'import');
 CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match := NULL) AS TABLE
-    SELECT
-        line_number,
-        content
-    FROM read_lines(file_path, lines, context := ctx)
-    WHERE match IS NULL OR content ILIKE '%' || match || '%';
+    SELECT line_number, content
+    FROM (
+        SELECT
+            line_number,
+            content,
+            max(CASE WHEN content ILIKE '%' || match || '%' THEN 1 ELSE 0 END)
+                OVER (
+                    ORDER BY line_number
+                    ROWS BETWEEN ctx PRECEDING AND ctx FOLLOWING
+                ) AS near_match
+        FROM read_lines(file_path, lines, context := ctx)
+    )
+    WHERE match IS NULL OR near_match > 0;
 
 -- read_source_batch: Like read_source but includes file_path column
 -- for multi-file batch reads via glob patterns.
