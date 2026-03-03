@@ -13,7 +13,7 @@ import pytest
 
 from conftest import (
     CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH, V1_TOOLS,
-    call_tool, list_tools, md_row_count,
+    call_tool, json_row_count, list_tools, md_row_count, parse_json_rows,
 )
 
 # sitting_duck test data for multi-language coverage.
@@ -86,14 +86,14 @@ class TestReadLines:
     def test_reads_whole_file(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {"file_path": CONFTEST_PATH})
         assert "import pytest" in text
-        assert md_row_count(text) > 50
+        assert json_row_count(text) > 50
 
     def test_reads_line_range(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
             "file_path": CONFTEST_PATH,
             "lines": "1-5",
         })
-        assert md_row_count(text) == 5
+        assert json_row_count(text) == 5
 
     def test_reads_with_context(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
@@ -101,20 +101,18 @@ class TestReadLines:
             "lines": "10",
             "ctx": "2",
         })
-        assert md_row_count(text) == 5  # line 10 ± 2
+        assert json_row_count(text) == 5  # line 10 ± 2
 
     def test_reads_with_match(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
             "file_path": CONFTEST_PATH,
             "match": "import",
         })
-        rows = md_row_count(text)
-        assert rows > 0
-        # Every data row should contain the match term
-        data_lines = text.strip().split("\n")[2:]
-        for line in data_lines:
-            if line.strip().startswith("|"):
-                assert "import" in line.lower()
+        rows = parse_json_rows(text, ["line_number", "content"])
+        assert len(rows) > 0
+        # Every returned row should contain the match term
+        for row in rows:
+            assert "import" in row["content"].lower()
 
     def test_reads_git_version(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
@@ -129,7 +127,7 @@ class TestReadLines:
             "lines": "1-20",
             "match": "import",
         })
-        rows = md_row_count(text)
+        rows = json_row_count(text)
         assert rows > 0
         assert rows < 20
 
@@ -424,7 +422,7 @@ class TestGitShow:
             "file": "LICENSE",
             "rev": "HEAD",
         })
-        assert md_row_count(text) >= 1
+        assert json_row_count(text) >= 1
         assert "LICENSE" in text
 
     def test_returns_metadata_columns(self, mcp_server):
@@ -432,15 +430,19 @@ class TestGitShow:
             "file": "LICENSE",
             "rev": "HEAD",
         })
-        for col in ("file_path", "ref", "size_bytes", "content"):
-            assert col in text
+        # Parse and verify all expected columns are present
+        expected_keys = ["file_path", "ref", "size_bytes", "content"]
+        rows = parse_json_rows(text, expected_keys)
+        assert len(rows) >= 1
+        for col in expected_keys:
+            assert rows[0][col] is not None
 
     def test_returns_file_at_prior_revision(self, mcp_server):
         text = call_tool(mcp_server, "GitShow", {
             "file": "LICENSE",
             "rev": "HEAD~1",
         })
-        assert md_row_count(text) >= 1
+        assert json_row_count(text) >= 1
         assert "LICENSE" in text
 
 
@@ -511,7 +513,7 @@ class TestGitDiff:
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
-        assert md_row_count(text) > 0
+        assert json_row_count(text) > 0
 
     def test_file_diff_has_line_types(self, mcp_server):
         summary = call_tool(mcp_server, "GitDiffSummary", {
@@ -529,9 +531,11 @@ class TestGitDiff:
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
-        assert md_row_count(text) > 0
-        # Verify actual line type values appear in output
-        assert any(t in text for t in ("ADDED", "REMOVED"))
+        rows = parse_json_rows(text, ["seq", "line_type", "content"])
+        assert len(rows) > 0
+        # Verify actual line type values appear in parsed rows
+        line_types = {row["line_type"] for row in rows}
+        assert line_types & {"ADDED", "REMOVED"}
 
 
 # -- Conversations --

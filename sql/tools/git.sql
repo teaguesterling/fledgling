@@ -62,7 +62,7 @@ SELECT mcp_publish_tool(
     )',
     '{"file_path": {"type": "string", "description": "Repository-relative file path (e.g. sql/repo.sql)"}, "from_rev": {"type": "string", "description": "Base revision (e.g. HEAD~1, main, commit hash)"}, "to_rev": {"type": "string", "description": "Target revision (e.g. HEAD, feature-branch)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
     '["file_path", "from_rev", "to_rev"]',
-    'markdown'
+    'json'
 );
 
 SELECT mcp_publish_tool(
@@ -75,7 +75,7 @@ SELECT mcp_publish_tool(
     )',
     '{"file": {"type": "string", "description": "Repository-relative file path (e.g. README.md, sql/repo.sql)"}, "rev": {"type": "string", "description": "Git revision (e.g. HEAD, HEAD~1, main, v1.0, commit hash)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
     '["file", "rev"]',
-    'markdown'
+    'json'
 );
 
 SELECT mcp_publish_tool(

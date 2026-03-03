@@ -42,7 +42,7 @@ SELECT mcp_publish_tool(
     )',
     '{"file_path": {"type": "string", "description": "Path to the file (absolute or relative to project root)"}, "lines": {"type": "string", "description": "Line selection: single (42), range (10-20), or context (42 +/-5)"}, "ctx": {"type": "string", "description": "Context lines around selection (default 0)"}, "match": {"type": "string", "description": "Case-insensitive substring filter on line content"}, "commit": {"type": "string", "description": "Git revision (e.g. HEAD, main~2). Uses repo-relative path."}}',
     '["file_path"]',
-    'markdown'
+    'json'
 );
 
 SELECT mcp_publish_tool(

@@ -206,6 +206,8 @@ Per-profile entry point (e.g. init-fledgling-analyst.sql):
 
 12. **duckdb_mcp query tool is not read-only** — The built-in query tool (duckdb_mcp#34) does not enforce read-only access. DDL/DML like `CREATE TABLE` succeeds. `access_mode = 'read_only'` cannot be set after database open. Fix must happen in duckdb_mcp's query tool handler.
 
+13. **duckdb_mcp JSON format doesn't escape double quotes** — (duckdb_mcp#52) The `'json'` output format emits raw `"` inside string values instead of `\"`. `json.loads()` fails on content containing quotes (docstrings, HTML attributes, etc.). Content-heavy tools (`ReadLines`, `GitShow`, `GitDiffFile`, `MDSection`) use JSON format to avoid markdown `|` escaping. Tests use `parse_json_rows(text, keys)` which splits on known key-name delimiters instead of JSON string parsing.
+
 <!-- blq:agent-instructions -->
 ## blq - Build Log Query
 
