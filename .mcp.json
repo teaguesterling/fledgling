@@ -2,7 +2,10 @@
   "mcpServers": {
     "fledgling": {
       "command": "sh",
-      "args": ["-c", "exec duckdb -init init-fledgling.sql"],
+      "args": [
+        "-c",
+        "exec duckdb -init init-fledgling.sql"
+      ],
       "cwd": "."
     },
     "blq_mcp": {
@@ -11,6 +14,13 @@
         "mcp",
         "serve"
       ]
+    },
+    "jetsam": {
+      "command": "jetsam",
+      "args": [
+        "serve"
+      ],
+      "type": "stdio"
     }
   }
 }
