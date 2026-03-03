@@ -1,6 +1,6 @@
 # P2-007: Profile Integration and Polish
 
-**Status:** Not started
+**Status:** Complete (delivered by P3-006 launcher + P2-006 profile work)
 **Depends on:** P2-006 (security profiles)
 **Estimated scope:** Config updates + documentation + smoke tests
 
