@@ -82,6 +82,19 @@ class TestListFiles:
         assert md_row_count(text) == 0
 
 
+class TestProjectOverview:
+    def test_returns_language_breakdown(self, mcp_server):
+        text = call_tool(mcp_server, "ProjectOverview", {})
+        assert "SQL" in text
+        assert "Python" in text
+        assert md_row_count(text) > 0
+
+    def test_path_scopes_to_subdirectory(self, mcp_server):
+        text = call_tool(mcp_server, "ProjectOverview", {"path": "sql"})
+        assert "SQL" in text
+        assert md_row_count(text) > 0
+
+
 class TestReadLines:
     def test_reads_whole_file(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {"file_path": CONFTEST_PATH})

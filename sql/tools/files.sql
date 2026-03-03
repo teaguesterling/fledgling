@@ -46,6 +46,17 @@ SELECT mcp_publish_tool(
 );
 
 SELECT mcp_publish_tool(
+    'ProjectOverview',
+    'Quick overview of project contents: file counts grouped by language/extension. Answers "what is this project?" without multiple exploratory calls.',
+    'SELECT * FROM project_overview(
+        COALESCE(resolve(NULLIF($path, ''null'')), ''' || getvariable('session_root') || ''')
+    )',
+    '{"path": {"type": "string", "description": "Directory to analyze (default: project root)"}}',
+    '[]',
+    'markdown'
+);
+
+SELECT mcp_publish_tool(
     'ReadAsTable',
     'Preview structured data files (CSV, JSON) as tables. Uses DuckDB auto-detection for schema inference.',
     'SELECT * FROM read_as_table(

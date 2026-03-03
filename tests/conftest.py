@@ -119,9 +119,10 @@ def all_macros(con):
     return con
 
 
-# The 21 V1 custom tools that should be published in all profiles
+# The 22 V1 custom tools that should be published in all profiles
 V1_TOOLS = [
     "ListFiles",
+    "ProjectOverview",
     "ReadLines",
     "ReadAsTable",
     "FindDefinitions",

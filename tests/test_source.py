@@ -94,6 +94,73 @@ class TestReadContext:
         assert center_rows[0][0] == 10
 
 
+class TestProjectOverviewMacro:
+    def test_columns(self, source_macros):
+        desc = source_macros.execute(
+            "DESCRIBE SELECT * FROM project_overview(?)", [PROJECT_ROOT]
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert "language" in col_names
+        assert "extension" in col_names
+        assert "file_count" in col_names
+
+    def test_returns_language_breakdown(self, source_macros):
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [PROJECT_ROOT]
+        ).fetchall()
+        assert len(rows) > 0
+        languages = {r[0] for r in rows}
+        assert "SQL" in languages
+        assert "Python" in languages
+
+    def test_file_counts_are_positive(self, source_macros):
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [PROJECT_ROOT]
+        ).fetchall()
+        for row in rows:
+            assert row[2] > 0
+
+    def test_ordered_by_file_count_desc(self, source_macros):
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [PROJECT_ROOT]
+        ).fetchall()
+        counts = [r[2] for r in rows]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_subdirectory_scoping(self, source_macros):
+        all_rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [PROJECT_ROOT]
+        ).fetchall()
+        sql_rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [PROJECT_ROOT + "/sql"]
+        ).fetchall()
+        assert len(sql_rows) < len(all_rows)
+        sql_languages = {r[0] for r in sql_rows}
+        assert "SQL" in sql_languages
+
+    def test_aggregation_with_fixture_data(self, source_macros, tmp_path):
+        (tmp_path / "main.py").write_text("print('hello')")
+        (tmp_path / "utils.py").write_text("def util(): pass")
+        (tmp_path / "schema.sql").write_text("CREATE TABLE t(id INT)")
+        (tmp_path / "README.md").write_text("# README")
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [str(tmp_path)]
+        ).fetchall()
+        assert len(rows) == 3
+        by_lang = {r[0]: r[2] for r in rows}
+        assert by_lang["Python"] == 2
+        assert by_lang["SQL"] == 1
+        assert by_lang["Markdown"] == 1
+
+    def test_empty_directory_returns_zero_rows(self, source_macros, tmp_path):
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [str(empty_dir)]
+        ).fetchall()
+        assert len(rows) == 0
+
+
 class TestFileLineCount:
     def test_single_file(self, source_macros):
         rows = source_macros.execute(
