@@ -1,6 +1,6 @@
 # P3-005: ProjectOverview Tool
 
-**Status:** Not started
+**Status:** Complete
 **Depends on:** P2-001 (ListFiles), P2-002 (CodeStructure)
 **Estimated scope:** New macro + tool publication
 

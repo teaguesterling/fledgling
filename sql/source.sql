@@ -83,6 +83,59 @@ CREATE OR REPLACE MACRO list_files(pattern, commit := NULL) AS TABLE
         END
     );
 
+-- project_overview: Summarize project contents by file type.
+-- Groups files by extension and maps to language names, giving a quick
+-- overview of what a project contains. Filters out .git directory contents.
+--
+-- Examples:
+--   SELECT * FROM project_overview('/path/to/project');
+--   SELECT * FROM project_overview('.');
+CREATE OR REPLACE MACRO project_overview(root := '.') AS TABLE
+    SELECT
+        CASE extension
+            WHEN 'py' THEN 'Python'
+            WHEN 'pyi' THEN 'Python'
+            WHEN 'js' THEN 'JavaScript'
+            WHEN 'jsx' THEN 'JavaScript'
+            WHEN 'mjs' THEN 'JavaScript'
+            WHEN 'ts' THEN 'TypeScript'
+            WHEN 'tsx' THEN 'TypeScript'
+            WHEN 'sql' THEN 'SQL'
+            WHEN 'rs' THEN 'Rust'
+            WHEN 'go' THEN 'Go'
+            WHEN 'java' THEN 'Java'
+            WHEN 'rb' THEN 'Ruby'
+            WHEN 'sh' THEN 'Shell'
+            WHEN 'bash' THEN 'Shell'
+            WHEN 'zsh' THEN 'Shell'
+            WHEN 'md' THEN 'Markdown'
+            WHEN 'json' THEN 'JSON'
+            WHEN 'yaml' THEN 'YAML'
+            WHEN 'yml' THEN 'YAML'
+            WHEN 'toml' THEN 'TOML'
+            WHEN 'html' THEN 'HTML'
+            WHEN 'css' THEN 'CSS'
+            WHEN 'c' THEN 'C'
+            WHEN 'cpp' THEN 'C++'
+            WHEN 'cc' THEN 'C++'
+            WHEN 'h' THEN 'C/C++'
+            WHEN 'hpp' THEN 'C/C++'
+            WHEN 'txt' THEN 'Text'
+            WHEN 'xml' THEN 'XML'
+            WHEN '' THEN '(other)'
+            ELSE extension
+        END AS language,
+        extension,
+        count(*) AS file_count
+    FROM (
+        SELECT
+            lower(regexp_extract(file_path, '\.([^./]+)$', 1)) AS extension
+        FROM list_files(rtrim(root, '/') || '/**/*')
+        WHERE file_path NOT LIKE '%/.git/%'
+    )
+    GROUP BY ALL
+    ORDER BY file_count DESC;
+
 -- read_as_table: Preview structured data files (CSV, JSON) as tables.
 -- Uses query() for dynamic dispatch between read_csv_auto and read_json_auto
 -- based on file extension. Avoids query_table() which conflicts with Python's
