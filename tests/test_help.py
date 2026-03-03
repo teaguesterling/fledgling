@@ -27,6 +27,8 @@ class TestHelpOutline:
         assert "code-intelligence" in ids
         assert "workflows" in ids
         assert "tips" in ids
+        assert "conversations" in ids
+        assert "macro-reference" in ids
 
     def test_sections_in_document_order(self, help_macros):
         """Outline sections appear in document order (quick-reference before tips)."""
@@ -84,5 +86,19 @@ class TestHelpSection:
         """A subsection like 'listfiles' should be findable by ID."""
         rows = help_macros.execute(
             "SELECT * FROM help('listfiles')"
+        ).fetchall()
+        assert len(rows) >= 1
+
+    def test_finds_conversation_section(self, help_macros):
+        """Conversation tool sections should be findable by ID."""
+        rows = help_macros.execute(
+            "SELECT * FROM help('chatsessions')"
+        ).fetchall()
+        assert len(rows) >= 1
+
+    def test_finds_git_tool_section(self, help_macros):
+        """Git tool subsections added in the rewrite should be findable."""
+        rows = help_macros.execute(
+            "SELECT * FROM help('gittags')"
         ).fetchall()
         assert len(rows) >= 1
