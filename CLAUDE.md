@@ -222,7 +222,17 @@ Per-profile entry point (e.g. init/init-fledgling-analyst.sql):
 
 12. **duckdb_mcp query tool is not read-only** — The built-in query tool (duckdb_mcp#34) does not enforce read-only access. DDL/DML like `CREATE TABLE` succeeds. `access_mode = 'read_only'` cannot be set after database open. Fix must happen in duckdb_mcp's query tool handler.
 
-13. **duckdb_mcp JSON format doesn't escape double quotes** — (duckdb_mcp#52) The `'json'` output format emits raw `"` inside string values instead of `\"`. `json.loads()` fails on content containing quotes (docstrings, HTML attributes, etc.). Content-heavy tools (`ReadLines`, `GitShow`, `GitDiffFile`, `MDSection`) use JSON format to avoid markdown `|` escaping. Tests use `parse_json_rows(text, keys)` which splits on known key-name delimiters instead of JSON string parsing.
+13. **duckdb_mcp JSON format doesn't escape double quotes** — (duckdb_mcp#52) The `'json'` output format emits raw `"` inside string values instead of `\"`. `json.loads()` fails on content containing quotes (docstrings, HTML attributes, etc.). Tests use `parse_json_rows(text, keys)` which splits on known key-name delimiters instead of JSON string parsing.
+
+14. **duckdb_mcp markdown format doesn't escape pipes** — (duckdb_mcp#54) The `'markdown'` output format does not escape `|` in cell values, so content containing pipes breaks table structure. Pending upstream fix.
+
+## Tool Output Format Strategy
+
+Three output formats, chosen by what the tool returns:
+
+- **`'markdown'`** — Tabular tools with short, structured values: ListFiles, ProjectOverview, ReadAsTable, FindDefinitions, FindCalls, FindImports, CodeStructure, MDOutline, GitChanges, GitBranches, GitDiffSummary, GitTags, GitStatus, ChatSessions, ChatSearch, ChatToolUsage, ChatDetail, Help.
+- **`'json'`** — Tools returning metadata alongside large content blobs: GitShow (1 row, entire file), MDSection (section metadata + full markdown text).
+- **`'text'`** (pending duckdb_mcp#55) — Line-oriented content tools where the agent is reading, not parsing structure: ReadLines, GitDiffFile. Tool SQL controls formatting via `printf()`. Currently using `'json'` as interim format until `'text'` is available upstream.
 
 <!-- blq:agent-instructions -->
 ## blq - Build Log Query
