@@ -30,4 +30,4 @@ SET lock_configuration = true;
 
 -- Restore output and start server
 .output stdout
-SELECT mcp_server_start('stdio', getvariable('mcp_server_options'));
+SELECT mcp_server_start(COALESCE(getvariable('transport'), 'stdio'), getvariable('mcp_server_options'));

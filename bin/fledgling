@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+#
+# fledgling — launcher for the Fledgling MCP server
+#
+# Builds and execs the right `duckdb -init` command with proper variable
+# injection. No temp files, no Python dependencies.
+#
+# Usage:
+#   fledgling serve [--profile PROFILE] [--transport TRANSPORT] [--root DIR]
+#   fledgling info  [--root DIR]
+#   fledgling --help
+#
+# Configuration precedence (highest wins):
+#   CLI flags > environment variables > config file (.fledgling or fledgling.conf)
+
+set -euo pipefail
+
+# Resolve FLEDGLING_HOME relative to this script's location
+FLEDGLING_HOME="$(cd "$(dirname "$0")/.." && pwd)"
+
+VERSION="0.1.0"
+
+usage() {
+    cat <<EOF
+fledgling $VERSION — Fledgling MCP server launcher
+
+Usage:
+  fledgling serve [options]    Start the MCP server
+  fledgling info  [options]    Print diagnostic information
+  fledgling --help             Show this help
+  fledgling --version          Show version
+
+Options:
+  --profile PROFILE    Server profile: core or analyst (default: analyst)
+  --transport TRANSPORT  MCP transport: stdio or sse (default: stdio)
+  --root DIR           Project root directory (default: \$PWD)
+
+Configuration:
+  Place a .fledgling or fledgling.conf file in your project root:
+
+    FLEDGLING_PROFILE=core
+    FLEDGLING_TRANSPORT=stdio
+    # FLEDGLING_EXTRA_DIRS="['/data/shared']"
+
+  Environment variables override config; CLI flags override both.
+
+Environment variables:
+  FLEDGLING_ROOT         Project root directory
+  FLEDGLING_PROFILE      Server profile
+  FLEDGLING_TRANSPORT    MCP transport
+  FLEDGLING_EXTRA_DIRS   Additional allowed directories (DuckDB list literal)
+EOF
+}
+
+die() {
+    printf 'fledgling: %s\n' "$1" >&2
+    exit 1
+}
+
+# ── Parse global arguments ──────────────────────────────────────────
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+fi
+
+case "$1" in
+    --help|-h)
+        usage
+        exit 0
+        ;;
+    --version|-V)
+        echo "fledgling $VERSION"
+        exit 0
+        ;;
+    serve|info)
+        COMMAND="$1"
+        shift
+        ;;
+    *)
+        die "unknown command: $1 (try --help)"
+        ;;
+esac
+
+# ── Parse subcommand flags ──────────────────────────────────────────
+
+profile_flag=""
+transport_flag=""
+root_flag=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --profile)
+            [[ $# -ge 2 ]] || die "--profile requires a value"
+            profile_flag="$2"; shift 2 ;;
+        --transport)
+            [[ $# -ge 2 ]] || die "--transport requires a value"
+            transport_flag="$2"; shift 2 ;;
+        --root)
+            [[ $# -ge 2 ]] || die "--root requires a value"
+            root_flag="$2"; shift 2 ;;
+        --help|-h)
+            usage; exit 0 ;;
+        *)
+            die "unknown option: $1 (try --help)" ;;
+    esac
+done
+
+# ── Resolve project root ───────────────────────────────────────────
+
+PROJECT_ROOT="${root_flag:-${FLEDGLING_ROOT:-$PWD}}"
+PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"  # resolve to absolute path
+
+# ── Save env vars before config can clobber them ────────────────────
+
+env_profile="${FLEDGLING_PROFILE:-}"
+env_transport="${FLEDGLING_TRANSPORT:-}"
+env_extra_dirs="${FLEDGLING_EXTRA_DIRS:-}"
+
+# ── Source optional config file ─────────────────────────────────────
+
+for f in "$PROJECT_ROOT/.fledgling" "$PROJECT_ROOT/fledgling.conf"; do
+    if [[ -f "$f" ]]; then
+        # shellcheck source=/dev/null
+        . "$f"
+        break
+    fi
+done
+
+# ── Merge: config < env < CLI flags ────────────────────────────────
+# Config file sets FLEDGLING_* vars. Env vars (saved above) override config.
+# CLI flags override everything.
+
+FLEDGLING_PROFILE="${env_profile:-${FLEDGLING_PROFILE:-}}"
+FLEDGLING_TRANSPORT="${env_transport:-${FLEDGLING_TRANSPORT:-}}"
+FLEDGLING_EXTRA_DIRS="${env_extra_dirs:-${FLEDGLING_EXTRA_DIRS:-}}"
+
+PROFILE="${profile_flag:-${FLEDGLING_PROFILE:-analyst}}"
+TRANSPORT="${transport_flag:-${FLEDGLING_TRANSPORT:-stdio}}"
+
+# ── Validate ────────────────────────────────────────────────────────
+
+case "$PROFILE" in
+    core|analyst) ;;
+    *) die "unknown profile: $PROFILE (expected: core, analyst)" ;;
+esac
+
+INIT_FILE="init-fledgling-${PROFILE}.sql"
+[[ -f "$FLEDGLING_HOME/$INIT_FILE" ]] || die "init file not found: $FLEDGLING_HOME/$INIT_FILE"
+
+# ── Execute command ─────────────────────────────────────────────────
+
+case "$COMMAND" in
+    serve)
+        # Verify duckdb is available
+        command -v duckdb >/dev/null 2>&1 || die "duckdb not found in PATH"
+
+        # Build the duckdb command
+        cmd=(duckdb
+            -cmd ".cd $FLEDGLING_HOME"
+            -cmd "SET VARIABLE session_root = '$PROJECT_ROOT'"
+            -cmd "SET VARIABLE transport = '$TRANSPORT'"
+        )
+
+        # Optional: extra allowed directories
+        if [[ -n "${FLEDGLING_EXTRA_DIRS:-}" ]]; then
+            cmd+=(-cmd "SET VARIABLE extra_dirs = $FLEDGLING_EXTRA_DIRS")
+        fi
+
+        cmd+=(-init "$INIT_FILE")
+
+        exec "${cmd[@]}"
+        ;;
+
+    info)
+        echo "fledgling $VERSION"
+        echo ""
+        echo "Fledgling home:  $FLEDGLING_HOME"
+        echo "Project root:    $PROJECT_ROOT"
+        echo "Profile:         $PROFILE"
+        echo "Transport:       $TRANSPORT"
+        echo "Init file:       $INIT_FILE"
+        echo ""
+
+        # Config file
+        config_found="none"
+        for f in "$PROJECT_ROOT/.fledgling" "$PROJECT_ROOT/fledgling.conf"; do
+            if [[ -f "$f" ]]; then
+                config_found="$f"
+                break
+            fi
+        done
+        echo "Config file:     $config_found"
+
+        # Extra dirs
+        echo "Extra dirs:      ${FLEDGLING_EXTRA_DIRS:-none}"
+        echo ""
+
+        # DuckDB
+        if command -v duckdb >/dev/null 2>&1; then
+            echo "duckdb:          $(command -v duckdb)"
+            echo "duckdb version:  $(duckdb -version 2>/dev/null || echo 'unknown')"
+        else
+            echo "duckdb:          NOT FOUND"
+        fi
+        echo ""
+
+        # SQL files
+        sql_count=$(find "$FLEDGLING_HOME/sql" -name '*.sql' 2>/dev/null | wc -l)
+        init_count=$(find "$FLEDGLING_HOME" -maxdepth 1 -name 'init-*.sql' 2>/dev/null | wc -l)
+        echo "SQL files:       $sql_count (sql/) + $init_count (init)"
+
+        # Project files (if in a git repo)
+        if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            file_count=$(git -C "$PROJECT_ROOT" ls-files | wc -l)
+            echo "Project files:   $file_count (git tracked)"
+        else
+            file_count=$(find "$PROJECT_ROOT" -type f ! -path '*/.*' 2>/dev/null | wc -l)
+            echo "Project files:   ~$file_count (non-hidden)"
+        fi
+        ;;
+esac
