@@ -13,7 +13,8 @@ import pytest
 
 from conftest import (
     CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH, V1_TOOLS,
-    call_tool, json_row_count, list_tools, md_row_count, parse_json_rows,
+    call_tool, json_row_count, list_tools, md_row_count, mcp_request,
+    parse_json_rows,
 )
 
 # sitting_duck test data for multi-language coverage.
@@ -143,6 +144,17 @@ class TestReadLines:
         rows = json_row_count(text)
         assert rows > 0
         assert rows < 20
+
+    def test_nonexistent_file_returns_error(self, mcp_server):
+        resp = mcp_request(mcp_server, "tools/call", {
+            "name": "ReadLines",
+            "arguments": {
+                "file_path": "this-file-does-not-exist.txt",
+                "lines": None, "ctx": None, "match": None, "commit": None,
+            },
+        })
+        assert "error" in resp
+        assert "File not found" in resp["error"]["message"]
 
 
 class TestReadAsTable:

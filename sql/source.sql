@@ -9,6 +9,7 @@
 -- read_source: Read lines from a file with optional line selection and filtering.
 -- This is the primary replacement for cat/head/tail bash commands.
 -- Use match to filter lines by case-insensitive substring match.
+-- Raises an error if the file does not exist (distinguishes from empty files).
 --
 -- Examples:
 --   SELECT * FROM read_source('src/main.py');
@@ -16,6 +17,13 @@
 --   SELECT * FROM read_source('src/main.py', '42 +/-5');
 --   SELECT * FROM read_source('src/main.py', match := 'import');
 CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match := NULL) AS TABLE
+    WITH _file_guard AS (
+        SELECT CASE
+            WHEN (SELECT count(*) FROM glob(file_path)) = 0
+            THEN error('File not found: ' || file_path)
+            ELSE 0
+        END AS _check
+    )
     SELECT line_number, content
     FROM (
         SELECT
@@ -28,7 +36,8 @@ CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match :=
                 ) AS near_match
         FROM read_lines(file_path, lines, context := ctx)
     )
-    WHERE match IS NULL OR near_match > 0;
+    WHERE (match IS NULL OR near_match > 0)
+    AND (SELECT _check FROM _file_guard) = 0;
 
 -- read_source_batch: Like read_source but includes file_path column
 -- for multi-file batch reads via glob patterns.
