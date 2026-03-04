@@ -161,10 +161,16 @@ case "$COMMAND" in
         command -v duckdb >/dev/null 2>&1 || die "duckdb not found in PATH"
 
         # Build the duckdb command
+        #
+        # _resolve() and _session_root() are literal-valued macros for MCP
+        # tool templates where getvariable() returns NULL. They must be
+        # created via -cmd (before -init) because DuckDB has no dynamic DDL.
         cmd=(duckdb
             -cmd ".cd '$FLEDGLING_HOME'"
             -cmd "SET VARIABLE session_root = '$PROJECT_ROOT'"
             -cmd "SET VARIABLE transport = '$TRANSPORT'"
+            -cmd "CREATE OR REPLACE MACRO _resolve(p) AS CASE WHEN p IS NULL THEN NULL WHEN p[1] = '/' THEN p ELSE '$PROJECT_ROOT/' || p END"
+            -cmd "CREATE OR REPLACE MACRO _session_root() AS '$PROJECT_ROOT'"
         )
 
         # Optional: extra allowed directories

@@ -3,9 +3,8 @@
 -- MCP tool publications for file listing, reading, and data preview.
 -- Wraps macros from sql/source.sql.
 --
--- Embeds session_root at publish time (getvariable is not available
--- in MCP tool execution context). Must be loaded after sandbox.sql
--- and source.sql, with session_root already set.
+-- Uses _resolve() and _session_root() from sandbox.sql for path resolution
+-- in tool templates (getvariable is not available in MCP execution context).
 --
 -- Git mode dispatch (commit param) is handled in tool templates because
 -- git functions (git_tree, git_uri) require duck_tails, while the backing
@@ -16,8 +15,7 @@ SELECT mcp_publish_tool(
     'List files matching a pattern. Filesystem mode uses glob syntax (e.g. src/**/*.py). Git mode (with commit) uses SQL LIKE syntax (e.g. src/%.py).',
     'SELECT * FROM list_files(
         CASE WHEN NULLIF($commit, ''null'') IS NULL
-             THEN CASE WHEN $pattern[1] = ''/'' THEN $pattern
-                       ELSE ''' || getvariable('session_root') || '/'' || $pattern END
+             THEN _resolve($pattern)
              ELSE $pattern
         END,
         NULLIF($commit, ''null'')
@@ -32,9 +30,8 @@ SELECT mcp_publish_tool(
     'Read lines from a file with optional line range, context, and match filtering. Replaces cat/head/tail.',
     'SELECT * FROM read_source(
         CASE WHEN NULLIF($commit, ''null'') IS NULL
-             THEN CASE WHEN $file_path[1] = ''/'' THEN $file_path
-                       ELSE ''' || getvariable('session_root') || '/'' || $file_path END
-             ELSE git_uri(''' || getvariable('session_root') || ''', $file_path, NULLIF($commit, ''null''))
+             THEN _resolve($file_path)
+             ELSE git_uri(_session_root(), $file_path, NULLIF($commit, ''null''))
         END,
         NULLIF($lines, ''null''),
         COALESCE(TRY_CAST(NULLIF($ctx, ''null'') AS INT), 0),
@@ -49,11 +46,7 @@ SELECT mcp_publish_tool(
     'ProjectOverview',
     'Quick overview of project contents: file counts grouped by language/extension. Answers "what is this project?" without multiple exploratory calls.',
     'SELECT * FROM project_overview(
-        CASE WHEN NULLIF($path, ''null'') IS NULL
-             THEN ''' || getvariable('session_root') || '''
-             WHEN COALESCE(NULLIF($path, ''null''), '''')[1] = ''/'' THEN $path
-             ELSE ''' || getvariable('session_root') || '/'' || $path
-        END
+        COALESCE(_resolve(NULLIF($path, ''null'')), _session_root())
     )',
     '{"path": {"type": "string", "description": "Directory to analyze (default: project root)"}}',
     '[]',
@@ -64,8 +57,7 @@ SELECT mcp_publish_tool(
     'ReadAsTable',
     'Preview structured data files (CSV, JSON) as tables. Uses DuckDB auto-detection for schema inference.',
     'SELECT * FROM read_as_table(
-        CASE WHEN $file_path[1] = ''/'' THEN $file_path
-             ELSE ''' || getvariable('session_root') || '/'' || $file_path END,
+        _resolve($file_path),
         COALESCE(TRY_CAST(NULLIF($limit, ''null'') AS INT), 100)
     )',
     '{"file_path": {"type": "string", "description": "Path to a CSV, JSON, or other structured data file"}, "limit": {"type": "string", "description": "Maximum rows to return (default 100)"}}',
