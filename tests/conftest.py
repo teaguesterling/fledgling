@@ -38,6 +38,21 @@ def load_sql(con, filename):
             con.execute(stmt + ";")
 
 
+def create_resolve_macros(con, root=PROJECT_ROOT):
+    """Create _resolve() and _session_root() macros with an embedded literal.
+
+    These macros work in MCP tool templates where getvariable() returns NULL.
+    In production, bin/fledgling creates them via duckdb -cmd. In tests, this
+    helper provides the equivalent setup.
+    """
+    con.execute(f"""CREATE OR REPLACE MACRO _resolve(p) AS
+        CASE WHEN p IS NULL THEN NULL
+             WHEN p[1] = '/' THEN p
+             ELSE '{root}/' || p
+        END""")
+    con.execute(f"CREATE OR REPLACE MACRO _session_root() AS '{root}'")
+
+
 @pytest.fixture
 def con():
     """Fresh in-memory DuckDB connection."""
@@ -330,6 +345,7 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     con.execute("LOAD duck_tails")
     # Sandbox: set root and load resolve() macro
     con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
+    create_resolve_macros(con)
     load_sql(con, "sandbox.sql")
     # Macros
     load_sql(con, "source.sql")

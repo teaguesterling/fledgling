@@ -80,22 +80,22 @@ NULLIF($param, ''null'')
 
 ### Path resolution
 
-All file path params must go through `resolve()` for sandbox compatibility:
+Tool templates use `_resolve()` and `_session_root()` — literal-backed macros that work in the MCP execution context where `getvariable()` returns NULL. These macros are created externally (`bin/fledgling` via `-cmd`, `conftest.py` via `create_resolve_macros()`) with the session root baked into the macro body as a string literal.
+
+The variable-backed `resolve()` in `sandbox.sql` still works for direct SQL and macro bodies, but must NOT be used in `mcp_publish_tool()` templates.
 
 ```sql
--- Single file or glob pattern
-resolve($file_path)
-resolve($file_pattern)
+-- Required file path
+_resolve($file_path)
 
 -- Optional path with fallback to project root
-COALESCE(resolve(NULLIF($path, ''null'')), '<session_root>')
+COALESCE(_resolve(NULLIF($path, ''null'')), _session_root())
+
+-- Bare project root (no path parameter)
+_session_root()
 ```
 
-Git tool paths embed `session_root` at publish time because `getvariable()` is not available in the MCP tool execution context:
-
-```sql
-'... ''' || getvariable('session_root') || ''' ...'
-```
+Why not a subquery-based approach: DuckDB table functions reject subqueries as arguments (quirk #10), so macros containing `(SELECT ... FROM table)` cannot be passed to `list_files()`, `read_source()`, etc. The literal-based macros avoid this entirely.
 
 ## DuckDB Quirks
 
@@ -119,7 +119,7 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 
 9. **Table functions in UNION ALL dead branches** — Table functions like `glob()` may execute even in UNION ALL branches filtered by `WHERE false`, especially in the duckdb_mcp execution context. Use `query()` for conditional table function dispatch.
 
-10. **C++ table functions reject column refs in macros** — `text_diff_lines(r.col)` fails with "does not support lateral join column parameters". Subqueries also rejected. Workaround: reimplement in pure SQL (e.g., `unnest(string_split())` + CASE).
+10. **C++ table functions reject column refs and subqueries in macros** — `text_diff_lines(r.col)` fails with "does not support lateral join column parameters". Subqueries in macro arguments also rejected (e.g., a macro containing `(SELECT val FROM table)` cannot be passed to `list_files()`). Workaround: for column refs, reimplement in pure SQL; for path resolution, use literal-backed macros (`_resolve`, `_session_root`) created externally with the value baked in.
 
 ## Tests
 
@@ -153,6 +153,7 @@ mcp__blq_mcp__output(run_id=N, tail=30)                   # view output
 
 ### MCP test helpers (conftest.py)
 
+- `create_resolve_macros(con)` — create `_resolve()` and `_session_root()` with embedded literals
 - `call_tool(con, name, args)` — auto-fills missing params with `null`, asserts no error
 - `md_row_count(text)` — count data rows in markdown table output
 - `mcp_request(con, method, params)` — raw JSON-RPC to memory transport
@@ -197,16 +198,20 @@ Per-profile entry points (e.g. `init/init-fledgling-analyst.sql`) compose the
 base script with a profile:
 
 ```
+bin/fledgling (via duckdb -cmd, before init):
+  0. SET VARIABLE session_root              (from launcher's $PROJECT_ROOT)
+  0. CREATE MACRO _resolve(), _session_root()  (literal-backed, for MCP context)
+
 init/init-fledgling-base.sql:
   1. LOAD duckdb_mcp                        (before lockdown; duckdb#17136)
   2. LOAD read_lines
   3. LOAD sitting_duck
   4. LOAD markdown
   5. LOAD duck_tails
-  6. SET VARIABLE session_root = ...
+  6. SET VARIABLE session_root = ...         (COALESCE preserves -cmd value)
   7. Load sandbox.sql                       (resolve() macro)
   8. Load macro files (source, code, docs, repo)
-  9. Load tool publication files
+  9. Load tool publication files            (use _resolve/_session_root)
 
 Per-profile entry point (e.g. init/init-fledgling-analyst.sql):
   10. Load profile SQL                      (memory_limit + mcp_server_options)
@@ -225,6 +230,8 @@ Per-profile entry point (e.g. init/init-fledgling-analyst.sql):
 13. **duckdb_mcp JSON format doesn't escape double quotes** — (duckdb_mcp#52) The `'json'` output format emits raw `"` inside string values instead of `\"`. `json.loads()` fails on content containing quotes (docstrings, HTML attributes, etc.). Tests use `parse_json_rows(text, keys)` which splits on known key-name delimiters instead of JSON string parsing.
 
 14. **duckdb_mcp markdown format doesn't escape pipes** — (duckdb_mcp#54) The `'markdown'` output format does not escape `|` in cell values, so content containing pipes breaks table structure. Pending upstream fix.
+
+15. **getvariable() returns NULL in MCP tool templates** — Tool SQL templates execute in a context where `getvariable()` returns NULL. DuckDB macros are text-substituted (lazy), so a macro calling `getvariable()` also fails when invoked from a tool template. Fix: `_resolve()` and `_session_root()` macros with the session root baked in as a literal string, created by `bin/fledgling` via `-cmd` and `conftest.py` via `create_resolve_macros()`.
 
 ## Tool Output Format Strategy
 
