@@ -92,6 +92,5 @@ FROM read_markdown_sections('SKILL.md', content_mode := 'full',
 .read sql/tools/code.sql
 .read sql/tools/docs.sql
 .read sql/tools/git.sql
-.read sql/tools/structural.sql
 .read sql/tools/conversations.sql
 .read sql/tools/help.sql

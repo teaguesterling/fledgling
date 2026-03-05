@@ -12,7 +12,7 @@ import os
 import pytest
 
 from conftest import (
-    CONFTEST_PATH, PROJECT_ROOT, SPEC_PATH, V1_TOOLS,
+    CONFTEST_PATH, SPEC_PATH, V1_TOOLS,
     call_tool, json_row_count, list_tools, md_row_count, parse_json_rows,
 )
 
@@ -23,12 +23,9 @@ SITTING_DUCK_DATA = os.environ.get(
     os.path.expanduser("~/Projects/sitting_duck/main/test/data"),
 )
 JS_SIMPLE = os.path.join(SITTING_DUCK_DATA, "javascript/simple.js")
-JS_IMPORTS = os.path.join(SITTING_DUCK_DATA, "javascript/imports.js")
 RUST_SIMPLE = os.path.join(SITTING_DUCK_DATA, "rust/simple.rs")
-RUST_IMPORTS = os.path.join(SITTING_DUCK_DATA, "rust/imports.rs")
 GO_SIMPLE = os.path.join(SITTING_DUCK_DATA, "go/simple.go")
 PY_SIMPLE = os.path.join(SITTING_DUCK_DATA, "python/simple.py")
-PY_IMPORTS = os.path.join(SITTING_DUCK_DATA, "python/imports.py")
 
 _has_sitting_duck_data = os.path.isdir(SITTING_DUCK_DATA)
 
@@ -60,39 +57,6 @@ class TestToolDiscovery:
 
 
 # -- Files --
-
-
-class TestListFiles:
-    def test_lists_files_by_glob(self, mcp_server):
-        pattern = os.path.join(PROJECT_ROOT, "sql/*.sql")
-        text = call_tool(mcp_server, "ListFiles", {"pattern": pattern})
-        assert "source.sql" in text
-        assert "code.sql" in text
-
-    def test_lists_git_files(self, mcp_server):
-        text = call_tool(mcp_server, "ListFiles", {
-            "pattern": "sql/%",
-            "commit": "HEAD",
-        })
-        assert "source.sql" in text
-
-    def test_no_matches_returns_empty(self, mcp_server):
-        pattern = os.path.join(PROJECT_ROOT, "nonexistent_xyz_/*.foo")
-        text = call_tool(mcp_server, "ListFiles", {"pattern": pattern})
-        assert md_row_count(text) == 0
-
-
-class TestProjectOverview:
-    def test_returns_language_breakdown(self, mcp_server):
-        text = call_tool(mcp_server, "ProjectOverview", {})
-        assert "SQL" in text
-        assert "Python" in text
-        assert md_row_count(text) > 0
-
-    def test_path_scopes_to_subdirectory(self, mcp_server):
-        text = call_tool(mcp_server, "ProjectOverview", {"path": "sql"})
-        assert "SQL" in text
-        assert md_row_count(text) > 0
 
 
 class TestReadLines:
@@ -145,35 +109,6 @@ class TestReadLines:
         assert rows < 20
 
 
-class TestReadAsTable:
-    def test_reads_csv(self, mcp_server, tmp_path):
-        csv_file = tmp_path / "test.csv"
-        csv_file.write_text("name,value\nalpha,1\nbeta,2\ngamma,3\n")
-        text = call_tool(mcp_server, "ReadAsTable", {
-            "file_path": str(csv_file),
-        })
-        assert "alpha" in text
-        assert md_row_count(text) == 3
-
-    def test_reads_json(self, mcp_server, tmp_path):
-        json_file = tmp_path / "test.json"
-        json_file.write_text('[{"x": 1, "y": "a"}, {"x": 2, "y": "b"}]\n')
-        text = call_tool(mcp_server, "ReadAsTable", {
-            "file_path": str(json_file),
-        })
-        assert md_row_count(text) == 2
-
-    def test_limit_parameter(self, mcp_server, tmp_path):
-        csv_file = tmp_path / "big.csv"
-        lines = ["id,val"] + [f"{i},{i*10}" for i in range(200)]
-        csv_file.write_text("\n".join(lines) + "\n")
-        text = call_tool(mcp_server, "ReadAsTable", {
-            "file_path": str(csv_file),
-            "limit": "5",
-        })
-        assert md_row_count(text) == 5
-
-
 # -- Code --
 
 
@@ -196,23 +131,6 @@ class TestFindDefinitions:
         assert md_row_count(text_filtered) < md_row_count(text_all)
 
 
-class TestFindCalls:
-    def test_finds_function_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindCalls", {
-            "file_pattern": CONFTEST_PATH,
-        })
-        assert md_row_count(text) > 0
-
-
-class TestFindImports:
-    def test_finds_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindImports", {
-            "file_pattern": CONFTEST_PATH,
-        })
-        assert "pytest" in text
-        assert "duckdb" in text
-
-
 class TestCodeStructure:
     def test_returns_overview(self, mcp_server):
         text = call_tool(mcp_server, "CodeStructure", {
@@ -220,39 +138,6 @@ class TestCodeStructure:
         })
         assert "load_sql" in text
         assert md_row_count(text) > 0
-
-
-class TestComplexityHotspots:
-    def test_returns_results(self, mcp_server):
-        text = call_tool(mcp_server, "ComplexityHotspots", {
-            "file_pattern": CONFTEST_PATH,
-        })
-        assert md_row_count(text) > 0
-
-    def test_limit_parameter(self, mcp_server):
-        text = call_tool(mcp_server, "ComplexityHotspots", {
-            "file_pattern": CONFTEST_PATH,
-            "limit": "3",
-        })
-        assert md_row_count(text) == 3
-
-
-class TestFunctionCallers:
-    def test_finds_callers(self, mcp_server):
-        text = call_tool(mcp_server, "FunctionCallers", {
-            "file_pattern": CONFTEST_PATH,
-            "func_name": "load_sql",
-        })
-        assert md_row_count(text) > 0
-
-
-class TestModuleDependencies:
-    def test_no_match_returns_empty(self, mcp_server):
-        text = call_tool(mcp_server, "ModuleDependencies", {
-            "file_pattern": CONFTEST_PATH,
-            "package_prefix": "nonexistent_pkg",
-        })
-        assert md_row_count(text) == 0
 
 
 # -- Code: Multi-language (sitting_duck test data) --
@@ -272,19 +157,6 @@ class TestCodeToolsJavaScript:
         assert "hello" in text
         assert "Calculator" in text
         assert "fetchData" in text
-
-    def test_find_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindCalls", {
-            "file_pattern": JS_SIMPLE,
-        })
-        assert md_row_count(text) > 0
-        assert "log" in text
-
-    def test_find_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindImports", {
-            "file_pattern": JS_IMPORTS,
-        })
-        assert "react" in text
 
     def test_code_structure(self, mcp_server):
         text = call_tool(mcp_server, "CodeStructure", {
@@ -311,19 +183,6 @@ class TestCodeToolsRust:
         assert "create_user" in text
         assert md_row_count(text) >= 1
 
-    def test_find_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindCalls", {
-            "file_pattern": RUST_SIMPLE,
-        })
-        assert md_row_count(text) > 0
-        assert "validate_email" in text
-
-    def test_find_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindImports", {
-            "file_pattern": RUST_IMPORTS,
-        })
-        assert "HashMap" in text
-
     def test_code_structure(self, mcp_server):
         text = call_tool(mcp_server, "CodeStructure", {
             "file_pattern": RUST_SIMPLE,
@@ -340,18 +199,6 @@ class TestCodeToolsGo:
         })
         assert "Hello" in text
         assert "main" in text
-
-    def test_find_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindCalls", {
-            "file_pattern": GO_SIMPLE,
-        })
-        assert md_row_count(text) > 0
-
-    def test_find_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindImports", {
-            "file_pattern": GO_SIMPLE,
-        })
-        assert "fmt" in text
 
     def test_code_structure(self, mcp_server):
         text = call_tool(mcp_server, "CodeStructure", {
@@ -372,18 +219,6 @@ class TestCodeToolsPython:
         assert "hello" in text
         assert "MyClass" in text
 
-    def test_find_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindCalls", {
-            "file_pattern": PY_SIMPLE,
-        })
-        assert md_row_count(text) > 0
-
-    def test_find_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindImports", {
-            "file_pattern": PY_IMPORTS,
-        })
-        assert "os" in text
-
     def test_code_structure(self, mcp_server):
         text = call_tool(mcp_server, "CodeStructure", {
             "file_pattern": PY_SIMPLE,
@@ -393,25 +228,6 @@ class TestCodeToolsPython:
 
 
 # -- Docs --
-
-
-class TestMDOutline:
-    def test_returns_headings(self, mcp_server):
-        text = call_tool(mcp_server, "MDOutline", {
-            "file_pattern": SPEC_PATH,
-        })
-        assert md_row_count(text) > 5
-
-    def test_max_level_filter(self, mcp_server):
-        text_l1 = call_tool(mcp_server, "MDOutline", {
-            "file_pattern": SPEC_PATH,
-            "max_level": "1",
-        })
-        text_l3 = call_tool(mcp_server, "MDOutline", {
-            "file_pattern": SPEC_PATH,
-            "max_level": "3",
-        })
-        assert md_row_count(text_l1) < md_row_count(text_l3)
 
 
 class TestMDSection:
@@ -424,42 +240,6 @@ class TestMDSection:
 
 
 # -- Git --
-
-
-class TestGitChanges:
-    def test_returns_recent_commits(self, mcp_server):
-        text = call_tool(mcp_server, "GitChanges", {})
-        assert md_row_count(text) > 0
-
-    def test_count_parameter(self, mcp_server):
-        text = call_tool(mcp_server, "GitChanges", {"count": "3"})
-        assert 1 <= md_row_count(text) <= 3
-
-    def test_messages_are_single_line(self, mcp_server):
-        text = call_tool(mcp_server, "GitChanges", {})
-        # Data rows only (skip header + separator)
-        data_lines = [
-            l for l in text.strip().split("\n")
-            if l.strip().startswith("|")
-        ][2:]
-        for line in data_lines:
-            # Each message cell should have no embedded newlines
-            cells = line.split("|")
-            message = cells[4].strip() if len(cells) > 4 else ""
-            assert "\n" not in message
-
-
-class TestGitBranches:
-    def test_lists_branches(self, mcp_server):
-        text = call_tool(mcp_server, "GitBranches", {})
-        assert md_row_count(text) > 0
-
-
-class TestGitTags:
-    def test_executes_without_error(self, mcp_server):
-        text = call_tool(mcp_server, "GitTags", {})
-        # Repo may or may not have tags; just verify the tool runs
-        assert text is not None
 
 
 class TestGitShow:
@@ -492,24 +272,6 @@ class TestGitShow:
         assert "LICENSE" in text
 
 
-class TestGitStatus:
-    def test_returns_markdown_table(self, mcp_server):
-        text = call_tool(mcp_server, "GitStatus", {})
-        assert "file_path" in text
-        assert "status" in text
-
-    def test_no_tracked_files_in_output(self, mcp_server):
-        text = call_tool(mcp_server, "GitStatus", {})
-        data_lines = [
-            l for l in text.strip().split("\n")
-            if l.strip().startswith("|")
-        ][2:]  # skip header + separator
-        for line in data_lines:
-            file_path = line.split("|")[1].strip()
-            assert file_path != "CLAUDE.md"
-            assert file_path != "sql/repo.sql"
-
-
 # -- Help --
 
 
@@ -524,117 +286,20 @@ class TestHelp:
         assert md_row_count(text) >= 1
 
 
-class TestGitDiff:
-    def test_summary_returns_changed_files(self, mcp_server):
+class TestGitDiffSummary:
+    def test_returns_changed_files(self, mcp_server):
         text = call_tool(mcp_server, "GitDiffSummary", {
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
         assert md_row_count(text) >= 1
 
-    def test_summary_shows_status(self, mcp_server):
+    def test_shows_status(self, mcp_server):
         text = call_tool(mcp_server, "GitDiffSummary", {
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
-        # At least one status value should appear
         assert any(s in text for s in ("added", "deleted", "modified"))
-
-    def test_file_diff_shows_changes(self, mcp_server):
-        # First find a changed file via the summary tool
-        summary = call_tool(mcp_server, "GitDiffSummary", {
-            "from_rev": "HEAD~1",
-            "to_rev": "HEAD",
-        })
-        # Extract first file path from markdown table (3rd line, first column)
-        data_lines = [
-            l for l in summary.strip().split("\n")
-            if l.strip().startswith("|")
-        ][2:]  # skip header + separator
-        assert len(data_lines) > 0
-        file_path = data_lines[0].split("|")[1].strip()
-
-        text = call_tool(mcp_server, "GitDiffFile", {
-            "file_path": file_path,
-            "from_rev": "HEAD~1",
-            "to_rev": "HEAD",
-        })
-        assert json_row_count(text) > 0
-
-    def test_file_diff_has_line_types(self, mcp_server):
-        summary = call_tool(mcp_server, "GitDiffSummary", {
-            "from_rev": "HEAD~1",
-            "to_rev": "HEAD",
-        })
-        data_lines = [
-            l for l in summary.strip().split("\n")
-            if l.strip().startswith("|")
-        ][2:]
-        file_path = data_lines[0].split("|")[1].strip()
-
-        text = call_tool(mcp_server, "GitDiffFile", {
-            "file_path": file_path,
-            "from_rev": "HEAD~1",
-            "to_rev": "HEAD",
-        })
-        rows = parse_json_rows(text, ["seq", "line_type", "content"])
-        assert len(rows) > 0
-        # Verify actual line type values appear in parsed rows
-        line_types = {row["line_type"] for row in rows}
-        assert line_types & {"ADDED", "REMOVED"}
-
-
-# -- Structural Analysis --
-
-
-class TestStructuralDiffTool:
-    """MCP tool tests for StructuralDiff.
-
-    Blocked on sitting_duck#48: read_ast ignores @rev in git:// URIs.
-    Tests are xfail until the upstream fix lands.
-    """
-
-    @pytest.mark.xfail(
-        reason="sitting_duck#48: read_ast ignores @rev in git:// URIs",
-        strict=True,
-    )
-    def test_returns_changed_definitions(self, mcp_server):
-        text = call_tool(mcp_server, "StructuralDiff", {
-            "file": "tests/conftest.py",
-            "from_rev": "HEAD~15",
-            "to_rev": "HEAD",
-        })
-        assert md_row_count(text) > 0
-
-    def test_result_columns(self, mcp_server):
-        text = call_tool(mcp_server, "StructuralDiff", {
-            "file": "tests/conftest.py",
-            "from_rev": "HEAD~15",
-            "to_rev": "HEAD",
-        })
-        assert "name" in text
-        assert "change" in text
-        assert "complexity_delta" in text
-
-
-class TestChangedFunctionSummaryTool:
-    def test_returns_functions(self, mcp_server):
-        text = call_tool(mcp_server, "ChangedFunctionSummary", {
-            "from_rev": "HEAD~15",
-            "to_rev": "HEAD",
-            "file_pattern": "tests/**/*.py",
-        })
-        assert md_row_count(text) > 0
-
-    def test_columns(self, mcp_server):
-        text = call_tool(mcp_server, "ChangedFunctionSummary", {
-            "from_rev": "HEAD~15",
-            "to_rev": "HEAD",
-            "file_pattern": "tests/**/*.py",
-        })
-        assert "file_path" in text
-        assert "complexity" in text
-        assert "change_status" in text
 
 
 # -- Conversations --

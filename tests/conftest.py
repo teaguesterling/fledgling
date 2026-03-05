@@ -132,35 +132,20 @@ def structural_macros(con):
     return con
 
 
-# The 27 V1 custom tools that should be published in all profiles
+# Custom tools published in all profiles.
+# Many macros are available via the query tool without tool publications.
 V1_TOOLS = [
-    "ListFiles",
-    "ProjectOverview",
     "ReadLines",
-    "ReadAsTable",
     "FindDefinitions",
-    "FindCalls",
-    "FindImports",
     "CodeStructure",
-    "ComplexityHotspots",
-    "FunctionCallers",
-    "ModuleDependencies",
-    "MDOutline",
     "MDSection",
-    "GitChanges",
-    "GitBranches",
-    "GitTags",
+    "GitDiffSummary",
+    "GitShow",
     "Help",
     "ChatSessions",
     "ChatSearch",
     "ChatToolUsage",
     "ChatDetail",
-    "GitDiffSummary",
-    "GitDiffFile",
-    "GitShow",
-    "GitStatus",
-    "StructuralDiff",
-    "ChangedFunctionSummary",
 ]
 
 
@@ -385,7 +370,6 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
                       "tools/docs.sql", "tools/git.sql",
-                      "tools/structural.sql",
                       "tools/conversations.sql",
                       "tools/help.sql"]:
         try:
