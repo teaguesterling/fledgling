@@ -35,7 +35,7 @@ class TestRecentChanges:
 
     def test_initial_commit_message(self, repo_macros):
         rows = repo_macros.execute(
-            "SELECT message FROM recent_changes(100, ?)", [REPO_PATH]
+            "SELECT message FROM recent_changes(500, ?)", [REPO_PATH]
         ).fetchall()
         messages = [r[0] for r in rows]
         assert any("Initial commit" in m for m in messages)
