@@ -42,7 +42,7 @@ These macros are available via the **query** tool. They provide the full power o
 | `file_diff(file, from, to, repo)` | Line-level unified diff | `SELECT * FROM file_diff('src/main.py', 'HEAD~1', 'HEAD')` |
 | `working_tree_status(repo)` | Untracked/deleted files | `SELECT * FROM working_tree_status()` |
 | `structural_diff(file, from, to)` | Semantic diff: added/removed/modified definitions | `SELECT * FROM structural_diff('src/main.py', 'HEAD~1', 'HEAD')` |
-| `changed_function_summary(from, to, pattern)` | Functions in changed files, ranked by complexity | `SELECT * FROM changed_function_summary('HEAD~5', 'HEAD', 'src/**/*.py')` |
+| `changed_function_summary(from, to, pattern)` | Functions in changed files, ranked by cyclomatic complexity | `SELECT * FROM changed_function_summary('HEAD~5', 'HEAD', 'src/**/*.py')` |
 
 ## Tools
 

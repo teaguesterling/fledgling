@@ -106,17 +106,17 @@ class TestChangedFunctionSummary:
         col_names = [r[0] for r in desc]
         assert col_names == [
             "file_path", "name", "kind", "lines",
-            "complexity", "change_status",
+            "cyclomatic", "change_status",
         ]
 
-    def test_ordered_by_complexity_desc(self, structural_macros):
+    def test_ordered_by_cyclomatic_desc(self, structural_macros):
         rows = structural_macros.execute("""
-            SELECT complexity FROM changed_function_summary(
+            SELECT cyclomatic FROM changed_function_summary(
                 'HEAD~15', 'HEAD', ?
             )
         """, [PROJECT_ROOT + "/tests/**/*.py"]).fetchall()
-        complexity = [r[0] for r in rows]
-        assert complexity == sorted(complexity, reverse=True)
+        cyclomatic = [r[0] for r in rows]
+        assert cyclomatic == sorted(cyclomatic, reverse=True)
 
     def test_change_status_values(self, structural_macros):
         rows = structural_macros.execute("""

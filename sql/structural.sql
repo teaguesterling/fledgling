@@ -89,17 +89,20 @@ CREATE OR REPLACE MACRO changed_function_summary(from_rev, to_rev, file_pattern,
         FROM file_changes(from_rev, to_rev, repo)
         WHERE status IN ('added', 'modified')
     ),
+    ast AS (
+        SELECT * FROM read_ast(file_pattern)
+    ),
+    metrics AS (
+        SELECT * FROM ast_function_metrics(ast)
+    ),
     defs AS (
         SELECT
             file_path,
             name,
             semantic_type_to_string(semantic_type) AS kind,
             start_line,
-            end_line,
-            end_line - start_line + 1 AS lines,
-            descendant_count,
-            children_count
-        FROM read_ast(file_pattern)
+            end_line - start_line + 1 AS lines
+        FROM ast
         WHERE is_definition(semantic_type)
           AND depth <= 2
           AND name != ''
@@ -109,9 +112,10 @@ CREATE OR REPLACE MACRO changed_function_summary(from_rev, to_rev, file_pattern,
         d.name,
         d.kind,
         d.lines,
-        d.descendant_count AS complexity,
+        COALESCE(m.cyclomatic, 0) AS cyclomatic,
         c.status AS change_status
     FROM defs d
     JOIN changed c ON suffix(d.file_path, '/' || c.file_path)
                    OR d.file_path = c.file_path
-    ORDER BY d.descendant_count DESC, d.file_path, d.start_line;
+    LEFT JOIN metrics m ON d.file_path = m.file_path AND d.name = m.name
+    ORDER BY COALESCE(m.cyclomatic, 0) DESC, d.file_path, d.start_line;
