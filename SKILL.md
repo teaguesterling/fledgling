@@ -4,112 +4,68 @@ Fledgling gives you structured, token-efficient access to the codebase you're wo
 
 ## Quick Reference
 
-| Tool | Purpose | Returns | Macro |
-|------|---------|---------|-------|
-| | **Help** | | |
-| **Help** | This guide. Call with no args for outline, or a section ID for details. | `section_id, title, level, content` | `help` |
-| | **Files** | | |
-| **ListFiles** | Find files by glob pattern or git tree. | `file_path` | `list_files` |
-| **ReadLines** | Read file lines with optional range, context, and match filtering. | `line_number, content` | `read_source` |
-| **ProjectOverview** | File counts grouped by language/extension. | `language, extension, file_count` | `project_overview` |
-| **ReadAsTable** | Preview structured data (CSV, JSON) as tables. | `(varies by data)` | `read_as_table` |
-| | **Code** | | |
-| **FindDefinitions** | AST-based search for functions, classes, variables. | `file_path, name, kind, start_line, end_line, signature` | `find_definitions` |
-| **FindCalls** | Find where functions/methods are called (AST, not grep). | `file_path, name, start_line, call_expression` | `find_calls` |
-| **FindImports** | Find import/include/require statements. | `file_path, name, import_statement, start_line` | `find_imports` |
-| **CodeStructure** | Top-level overview: what's defined in each file. | `file_path, name, kind, start_line, end_line, line_count` | `code_structure` |
-| | **Docs** | | |
-| **MDOutline** | Table of contents for markdown files. | `file_path, section_id, section_path, level, title, start_line, end_line` | `doc_outline` |
-| **MDSection** | Read a specific section from a markdown file. | `section_id, title, level, content, start_line, end_line` | `read_doc_section` |
-| | **Git** | | |
-| **GitChanges** | Recent commit history. | `hash, author, date, message` | `recent_changes` |
-| **GitBranches** | List branches with current branch marked. | `branch_name, hash, is_current, is_remote` | `branch_list` |
-| **GitTags** | List tags with metadata. | `tag_name, hash, tagger_name, tagger_date, message, is_annotated` | `tag_list` |
-| **GitDiffSummary** | File-level change summary between revisions. | `file_path, status, old_size, new_size` | `file_changes` |
-| **GitDiffFile** | Line-level unified diff for a single file. | `seq, line_type, content` | `file_diff` |
-| **GitShow** | File content at a specific revision. | `file_path, ref, size_bytes, content` | `file_at_version` |
-| **GitStatus** | Working tree status (untracked/deleted files). | `file_path, status` | `working_tree_status` |
-| | **Conversations** | | |
-| **ChatSessions** | Browse Claude Code conversation sessions. | `session_id, project_dir, slug, git_branch, started_at, duration, ...` | `session_summary` |
-| **ChatSearch** | Full-text search across conversation messages. | `session_id, slug, role, content_preview, created_at` | `search_messages` |
-| **ChatToolUsage** | Tool usage frequency across sessions. | `tool_name, total_calls, sessions, first_used, last_used` | `tool_frequency` |
-| **ChatDetail** | Deep view of a single session with per-tool breakdown. | `slug, project_dir, duration, total_tokens, tool_name, calls, ...` | `session_summary` |
-| | **Query** | | |
-| **query** | Run arbitrary SQL against any of the above macros. | `(varies)` | — |
+### Tools
 
-## File Navigation
+| Tool | Purpose | Key params |
+|------|---------|------------|
+| **ReadLines** | Read file content with line ranges, context, and match filtering | `file_path`, `lines`, `match`, `commit` |
+| **FindDefinitions** | AST-based search for functions, classes, variables | `file_pattern`, `name_pattern` |
+| **CodeStructure** | Top-level overview: what's defined in each file | `file_pattern` |
+| **MDSection** | Read a markdown section by ID | `file_path`, `section_id` |
+| **GitDiffSummary** | File-level change summary between revisions | `from_rev`, `to_rev` |
+| **GitShow** | File content at a specific git revision | `file`, `rev` |
+| **Help** | This guide (no args = outline, section_id = details) | `section` |
+| **ChatSessions** | Browse conversation sessions | `project`, `days`, `limit` |
+| **ChatSearch** | Search across conversation messages | `query`, `role` |
+| **ChatToolUsage** | Tool usage frequency | `project`, `days` |
+| **ChatDetail** | Deep view of a single session | `session_id` |
 
-### ListFiles
+### Query-Only Macros
 
-Find files matching a glob pattern. Good for discovering project structure.
+These macros are available via the **query** tool. They provide the full power of Fledgling's SQL composability — you can join, filter, and aggregate across them.
 
-**Returns:** `file_path`
-**Macro:** `list_files(pattern, commit := NULL)`
+| Macro | Purpose | Example |
+|-------|---------|---------|
+| `list_files(pattern)` | Find files by glob | `SELECT * FROM list_files('src/**/*.py')` |
+| `project_overview(root)` | File counts by language | `SELECT * FROM project_overview('.')` |
+| `read_as_table(path, limit)` | Preview CSV/JSON as table | `SELECT * FROM read_as_table('data.csv')` |
+| `find_calls(pattern, name)` | Find function call sites | `SELECT * FROM find_calls('src/**/*.py', 'connect')` |
+| `find_imports(pattern)` | Find import statements | `SELECT * FROM find_imports('src/**/*.py')` |
+| `complexity_hotspots(pattern, n)` | Functions ranked by cyclomatic complexity | `SELECT * FROM complexity_hotspots('src/**/*.py', 10)` |
+| `function_callers(pattern, name)` | Who calls a function? | `SELECT * FROM function_callers('src/**/*.py', 'validate')` |
+| `module_dependencies(pattern, pkg)` | Internal import graph with fan-in | `SELECT * FROM module_dependencies('src/**/*.py', 'myapp')` |
+| `doc_outline(pattern, max_level)` | Markdown table of contents | `SELECT * FROM doc_outline('docs/**/*.md')` |
+| `recent_changes(n, repo)` | Commit history | `SELECT * FROM recent_changes(10)` |
+| `branch_list(repo)` | List branches | `SELECT * FROM branch_list()` |
+| `tag_list(repo)` | List tags | `SELECT * FROM tag_list()` |
+| `file_changes(from, to, repo)` | Files changed between revisions | `SELECT * FROM file_changes('HEAD~3', 'HEAD')` |
+| `file_diff(file, from, to, repo)` | Line-level unified diff | `SELECT * FROM file_diff('src/main.py', 'HEAD~1', 'HEAD')` |
+| `working_tree_status(repo)` | Untracked/deleted files | `SELECT * FROM working_tree_status()` |
+| `structural_diff(file, from, to)` | Semantic diff: added/removed/modified definitions | `SELECT * FROM structural_diff('src/main.py', 'HEAD~1', 'HEAD')` |
+| `changed_function_summary(from, to, pattern)` | Functions in changed files, ranked by complexity | `SELECT * FROM changed_function_summary('HEAD~5', 'HEAD', 'src/**/*.py')` |
 
-```
-ListFiles(pattern="src/**/*.py")           # all Python files under src/
-ListFiles(pattern="*.md")                  # markdown in current dir
-ListFiles(pattern="sql/%", commit="HEAD")  # git mode: SQL LIKE syntax
-```
-
-Git mode (with `commit`) uses SQL LIKE wildcards (`%`, `_`) instead of globs.
+## Tools
 
 ### ReadLines
 
 Read file content with precision. Replaces cat/head/tail with structured output.
 
 **Returns:** `line_number, content`
-**Macro:** `read_source(file_path, lines := NULL, ctx := 0, match := NULL)`
 
 ```
 ReadLines(file_path="src/main.py")                    # whole file
 ReadLines(file_path="src/main.py", lines="10-25")     # line range
-ReadLines(file_path="src/main.py", lines="42", ctx="5")  # line 42 ± 5 lines
+ReadLines(file_path="src/main.py", lines="42", ctx="5")  # line 42 +/- 5 lines
 ReadLines(file_path="src/main.py", match="import")    # only matching lines
 ReadLines(file_path="src/main.py", lines="1-50", match="def")  # combined
 ReadLines(file_path="src/main.py", commit="HEAD~1")   # previous version
 ```
 
-### ProjectOverview
-
-Quick overview of project contents: file counts grouped by language/extension. Answers "what is this project?" without multiple exploratory calls.
-
-**Returns:** `language, extension, file_count`
-**Macro:** `project_overview(root := '.')`
-
-```
-ProjectOverview()                    # whole project
-ProjectOverview(path="src")          # just src/
-```
-
-### ReadAsTable
-
-Preview structured data files as formatted tables.
-
-**Returns:** varies by data file schema
-**Macro:** `read_as_table(file_path, lim := 100)`
-
-```
-ReadAsTable(file_path="data/results.csv")
-ReadAsTable(file_path="config.json", limit="20")
-```
-
-Supports CSV, JSON, and other formats DuckDB can auto-detect.
-
-## Code Intelligence
-
-All code tools use AST parsing (via sitting_duck), not text matching. They work across 30 languages:
-
-Bash, C, C++, C#, CSS, Dart, F#, Go, GraphQL, Haskell, HCL, HTML, Java, JavaScript, JSON, Julia, Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, YAML, Zig
-
-Use `ast_supported_languages()` via the `query` tool for the live list.
-
 ### FindDefinitions
 
-Find where things are defined: functions, classes, methods, variables.
+Find where things are defined: functions, classes, methods, variables. AST-based, not text matching.
 
 **Returns:** `file_path, name, kind, start_line, end_line, signature`
-**Macro:** `find_definitions(file_pattern, name_pattern := '%')`
 
 ```
 FindDefinitions(file_pattern="src/**/*.py")                # all definitions
@@ -119,127 +75,37 @@ FindDefinitions(file_pattern="lib/*.ts", name_pattern="%Handler")   # names endi
 
 The `name_pattern` uses SQL LIKE wildcards: `%` matches any sequence, `_` matches one character.
 
-### FindCalls
-
-Find call sites — where functions and methods are invoked.
-
-**Returns:** `file_path, name, start_line, call_expression`
-**Macro:** `find_calls(file_pattern, name_pattern := '%')`
-
-```
-FindCalls(file_pattern="src/**/*.py")
-FindCalls(file_pattern="src/**/*.py", name_pattern="connect%")
-```
-
-### FindImports
-
-Find import/require/include statements across languages.
-
-**Returns:** `file_path, name, import_statement, start_line`
-**Macro:** `find_imports(file_pattern)`
-
-```
-FindImports(file_pattern="src/**/*.py")
-FindImports(file_pattern="src/**/*.ts")
-```
-
 ### CodeStructure
 
 High-level overview of what's defined in files, with line counts. Good first step to understand unfamiliar code.
 
 **Returns:** `file_path, name, kind, start_line, end_line, line_count`
-**Macro:** `code_structure(file_pattern)`
 
 ```
 CodeStructure(file_pattern="src/**/*.py")
 CodeStructure(file_pattern="lib/auth.ts")
 ```
 
-## Documentation
-
-### MDOutline
-
-Get the table of contents of markdown files. Returns section IDs you can pass to MDSection.
-
-**Returns:** `file_path, section_id, section_path, level, title, start_line, end_line`
-**Macro:** `doc_outline(file_pattern, max_lvl := 3)`
-
-```
-MDOutline(file_pattern="docs/**/*.md")
-MDOutline(file_pattern="README.md", max_level="2")  # only h1 and h2
-```
-
 ### MDSection
 
-Read a specific section by ID. Use MDOutline first to discover IDs.
+Read a specific markdown section by ID. Use `doc_outline()` via the query tool to discover section IDs first.
 
 **Returns:** `section_id, title, level, content, start_line, end_line`
-**Macro:** `read_doc_section(file_path, target_id)`
 
 ```
 MDSection(file_path="docs/guide.md", section_id="installation")
 MDSection(file_path="README.md", section_id="getting-started")
 ```
 
-Returns the section and its children (subsections).
-
-## Git
-
-### GitChanges
-
-Recent commit log. Replaces `git log --oneline`.
-
-**Returns:** `hash, author, date, message`
-**Macro:** `recent_changes(n := 10, repo := '.')`
-
-```
-GitChanges()              # last 10 commits
-GitChanges(count="5")     # last 5 commits
-```
-
-### GitBranches
-
-List all branches with the current branch marked.
-
-**Returns:** `branch_name, hash, is_current, is_remote`
-**Macro:** `branch_list(repo := '.')`
-
-```
-GitBranches()
-```
-
-### GitTags
-
-List all tags with metadata.
-
-**Returns:** `tag_name, hash, tagger_name, tagger_date, message, is_annotated`
-**Macro:** `tag_list(repo := '.')`
-
-```
-GitTags()
-```
-
 ### GitDiffSummary
 
-File-level summary of changes between two git revisions.
+File-level summary of changes between two git revisions. For function-level analysis, use `structural_diff()` or `changed_function_summary()` via the query tool.
 
 **Returns:** `file_path, status, old_size, new_size`
-**Macro:** `file_changes(from_rev, to_rev, repo := '.')`
 
 ```
 GitDiffSummary(from_rev="HEAD~1", to_rev="HEAD")
 GitDiffSummary(from_rev="main", to_rev="feature-branch")
-```
-
-### GitDiffFile
-
-Line-level unified diff for a specific file between two revisions.
-
-**Returns:** `seq, line_type, content`
-**Macro:** `file_diff(file, from_rev, to_rev, repo := '.')`
-
-```
-GitDiffFile(file_path="src/main.py", from_rev="HEAD~1", to_rev="HEAD")
 ```
 
 ### GitShow
@@ -247,122 +113,81 @@ GitDiffFile(file_path="src/main.py", from_rev="HEAD~1", to_rev="HEAD")
 Show file content at a specific git revision. Replaces `git show rev:path`.
 
 **Returns:** `file_path, ref, size_bytes, content`
-**Macro:** `file_at_version(file, rev, repo := '.')`
 
 ```
 GitShow(file="README.md", rev="HEAD~1")
 GitShow(file="sql/repo.sql", rev="main")
 ```
 
-### GitStatus
+### Help
 
-Working tree status: untracked and deleted files compared to HEAD.
-
-**Returns:** `file_path, status`
-**Macro:** `working_tree_status(repo := '.')`
+This guide. Call with no args to see the section outline, or pass a section ID for details.
 
 ```
-GitStatus()
+Help()                              # outline
+Help(section="workflows")           # specific section
 ```
 
-Does not detect content modifications — use GitDiffSummary for revision diffs.
+## Code Intelligence
 
-## Conversations
+All code tools use AST parsing (via sitting_duck), not text matching. They work across 30 languages including Python, JavaScript, TypeScript, Rust, Go, Java, C/C++, Ruby, and more.
 
-Tools for analyzing Claude Code conversation history (JSONL files in `~/.claude/projects/`).
+Use `ast_supported_languages()` via the `query` tool for the live list.
 
-### ChatSessions
+### Composing Macros
 
-Browse conversation sessions with metadata, duration, tool usage, and token consumption.
+The real power of Fledgling is composing macros via the query tool. Examples:
 
-**Returns:** `session_id, project_dir, slug, git_branch, started_at, duration, user_messages, total_tool_calls, distinct_tools_used, top_tool, total_tokens, avg_cache_hit_rate`
-**Macro:** `session_summary()`
+```sql
+-- Complex functions in recently changed files
+SELECT h.file_path, h.name, h.cyclomatic, h.lines
+FROM complexity_hotspots('src/**/*.py') h
+WHERE h.file_path IN (
+    SELECT file_path FROM changed_function_summary('main', 'HEAD', 'src/**/*.py')
+);
 
-```
-ChatSessions()                              # all recent sessions
-ChatSessions(project="my-project")          # filter by project name
-ChatSessions(days="7")                      # last week only
-ChatSessions(days="30", limit="5")          # top 5 from last month
-```
+-- Module dependency fan-in (what's the most-imported module?)
+SELECT target_module, fan_in
+FROM module_dependencies('src/**/*.py', 'myapp')
+ORDER BY fan_in DESC;
 
-### ChatSearch
-
-Full-text search across conversation messages.
-
-**Returns:** `session_id, slug, role, content_preview, created_at`
-**Macro:** `search_messages(search_term)`
-
-```
-ChatSearch(query="authentication")                    # search all messages
-ChatSearch(query="bug fix", role="assistant")          # only assistant replies
-ChatSearch(query="refactor", project="my-app", days="14")
-```
-
-### ChatToolUsage
-
-Tool usage frequency across sessions. Shows which tools are used most.
-
-**Returns:** `tool_name, total_calls, sessions, first_used, last_used`
-**Macro:** `tool_frequency()`
-
-```
-ChatToolUsage()                              # all tool usage
-ChatToolUsage(project="my-project")          # per-project breakdown
-ChatToolUsage(session_id="<uuid>")           # single session
-ChatToolUsage(days="7")                      # last week
-```
-
-### ChatDetail
-
-Deep view of a single session: metadata, token costs, and per-tool breakdown.
-
-**Returns:** `slug, project_dir, git_branch, started_at, duration, user_messages, assistant_messages, total_tokens, avg_cache_hit_rate, bash_calls, bash_replaceable_calls, tool_name, calls`
-**Macro:** `session_summary()` + `tool_frequency()`
-
-```
-ChatDetail(session_id="<uuid>")
+-- Functions over 20 lines with high complexity
+SELECT file_path, name, cyclomatic, lines
+FROM complexity_hotspots('src/**/*.py', 100)
+WHERE cyclomatic > 10 AND lines > 20;
 ```
 
 ## Workflows
 
 ### Explore an Unfamiliar Codebase
 
-1. `ProjectOverview()` — see languages and file counts at a glance
-2. `ListFiles(pattern="**/*.py")` — see what files exist
-3. `CodeStructure(file_pattern="src/**/*.py")` — understand what's defined where
-4. `MDOutline(file_pattern="*.md")` — check for documentation
-5. `MDSection(file_path="README.md", section_id="...")` — read relevant docs
+1. `CodeStructure(file_pattern="src/**/*.py")` — see what's defined where
+2. `ReadLines(file_path="src/main.py")` — read key files
+3. Use query tool: `SELECT * FROM doc_outline('*.md')` — find docs
+4. `MDSection(file_path="README.md", section_id="...")` — read relevant docs
 
 ### Understand a Function
 
-1. `FindDefinitions(file_pattern="src/**/*.py", name_pattern="my_func%")` — find where it's defined
-2. `ReadLines(file_path="src/module.py", lines="42-80")` — read the implementation
-3. `FindCalls(file_pattern="src/**/*.py", name_pattern="my_func%")` — find where it's called
+1. `FindDefinitions(file_pattern="src/**/*.py", name_pattern="my_func%")` — find it
+2. `ReadLines(file_path="src/module.py", lines="42-80")` — read implementation
+3. Use query tool: `SELECT * FROM function_callers('src/**/*.py', 'my_func')` — who calls it?
 
 ### Review Recent Changes
 
-1. `GitChanges(count="5")` — see what changed recently
-2. `GitDiffSummary(from_rev="HEAD~3", to_rev="HEAD")` — which files changed
-3. `GitDiffFile(file_path="src/changed.py", from_rev="HEAD~1", to_rev="HEAD")` — line-level diff
-4. `GitShow(file="src/changed.py", rev="HEAD~1")` — compare with previous version
+1. `GitDiffSummary(from_rev="HEAD~3", to_rev="HEAD")` — which files changed
+2. Use query tool: `SELECT * FROM changed_function_summary('HEAD~3', 'HEAD', 'src/**/*.py')` — what functions are affected
+3. Use query tool: `SELECT * FROM complexity_hotspots('src/**/*.py', 10)` — what's risky
+4. `ReadLines(file_path="src/changed.py", lines="42-80")` — read the changes
 
-### Analyze Dependencies
+### Analyze Architecture
 
-1. `FindImports(file_pattern="src/**/*.py")` — see all imports
-2. `FindCalls(file_pattern="src/**/*.py", name_pattern="module%")` — find usage of a specific module
-
-### Analyze Conversation Patterns
-
-1. `ChatSessions(days="30")` — recent session overview
-2. `ChatToolUsage(days="30")` — which tools get used most
-3. `ChatDetail(session_id="<uuid>")` — drill into a specific session
-4. `ChatSearch(query="error", days="7")` — find recent error discussions
+1. Use query tool: `SELECT * FROM module_dependencies('src/**/*.py', 'myapp')` — import graph
+2. `CodeStructure(file_pattern="src/core/*.py")` — core module structure
+3. Use query tool: `SELECT * FROM complexity_hotspots('src/**/*.py', 20)` — complexity hotspots
 
 ## Macro Reference
 
-The `query` tool lets you run arbitrary SQL using the underlying macros. This is useful for filtering, joining, or aggregating results beyond what individual tools expose.
-
-**Sandbox caveat:** Filesystem-backed macros (glob patterns like `src/**/*.py`) may fail in the `query` tool due to `allowed_directories` restrictions. Use the dedicated MCP tools for file operations. Git-backed and conversation macros work directly in `query`.
+All macros are available via the **query** tool.
 
 ### Files
 
@@ -384,6 +209,16 @@ The `query` tool lets you run arbitrary SQL using the underlying macros. This is
 | `find_calls` | `(file_pattern, name_pattern := '%')` |
 | `find_imports` | `(file_pattern)` |
 | `code_structure` | `(file_pattern)` |
+| `complexity_hotspots` | `(file_pattern, n := 20)` |
+| `function_callers` | `(file_pattern, func_name)` |
+| `module_dependencies` | `(file_pattern, package_prefix)` |
+
+### Structural Analysis
+
+| Macro | Signature |
+|-------|-----------|
+| `structural_diff` | `(file, from_rev, to_rev, repo := '.')` |
+| `changed_function_summary` | `(from_rev, to_rev, file_pattern, repo := '.')` |
 
 ### Docs
 
@@ -430,24 +265,6 @@ The `query` tool lets you run arbitrary SQL using the underlying macros. This is
 |-------|-----------|
 | `help` | `(target_id := NULL)` |
 
-### Example queries
-
-```sql
--- Recent commit history (git macros work in query)
-SELECT * FROM recent_changes(5);
-
--- Tool usage frequency across conversations
-SELECT tool_name, sum(call_count) AS total
-FROM tool_frequency()
-GROUP BY 1 ORDER BY 2 DESC;
-
--- Files changed between two revisions
-SELECT * FROM file_changes('HEAD~3', 'HEAD');
-
--- Token usage by model
-SELECT * FROM model_usage();
-```
-
 ## Tips
 
 ### Supported Languages
@@ -459,7 +276,6 @@ Use `ast_supported_languages()` via the `query` tool to check the live list of l
 - `*` matches within a directory: `src/*.py`
 - `**` matches across directories: `src/**/*.py`
 - Combine extensions: `src/**/*.{py,ts}`
-- Git mode uses SQL LIKE: `%` for any sequence, `_` for single character
 
 ### Path Handling
 
@@ -468,15 +284,9 @@ Use `ast_supported_languages()` via the `query` tool to check the live list of l
 - Git mode paths are always repo-relative
 - The sandbox restricts filesystem access to the project directory; use dedicated tools instead of raw SQL for file operations
 
-### Output Format
-
-All tools return markdown tables. When using the `query` tool, results are also formatted as markdown by default.
-
 ### Token Efficiency
 
-- Use `ProjectOverview` first to understand what's in the project
-- Use `MDOutline` before `MDSection` to avoid reading irrelevant docs
-- Use `CodeStructure` before `ReadLines` to find the right file and line range
+- Use `CodeStructure` first to understand what's in a file before reading it
 - Use `FindDefinitions` with `name_pattern` to narrow results
 - Use `ReadLines` with `lines` and `match` to read only what you need
-- Use `ListFiles` to verify paths before reading
+- Use `doc_outline()` via query before `MDSection` to find the right section

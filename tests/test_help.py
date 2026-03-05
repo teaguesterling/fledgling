@@ -23,11 +23,9 @@ class TestHelpOutline:
         ).fetchall()
         ids = [r[0] for r in rows]
         assert "quick-reference" in ids
-        assert "file-navigation" in ids
         assert "code-intelligence" in ids
         assert "workflows" in ids
         assert "tips" in ids
-        assert "conversations" in ids
         assert "macro-reference" in ids
 
     def test_sections_in_document_order(self, help_macros):
@@ -83,22 +81,22 @@ class TestHelpSection:
         assert len(rows) == 0
 
     def test_finds_leaf_section(self, help_macros):
-        """A subsection like 'listfiles' should be findable by ID."""
+        """A subsection like 'readlines' should be findable by ID."""
         rows = help_macros.execute(
-            "SELECT * FROM help('listfiles')"
+            "SELECT * FROM help('readlines')"
         ).fetchall()
         assert len(rows) >= 1
 
-    def test_finds_conversation_section(self, help_macros):
-        """Conversation tool sections should be findable by ID."""
+    def test_finds_composing_macros_section(self, help_macros):
+        """The composing-macros section should be findable."""
         rows = help_macros.execute(
-            "SELECT * FROM help('chatsessions')"
+            "SELECT * FROM help('composing-macros')"
         ).fetchall()
         assert len(rows) >= 1
 
-    def test_finds_git_tool_section(self, help_macros):
-        """Git tool subsections added in the rewrite should be findable."""
+    def test_finds_macro_reference_section(self, help_macros):
+        """Macro reference subsections should be findable."""
         rows = help_macros.execute(
-            "SELECT * FROM help('gittags')"
+            "SELECT * FROM help('structural-analysis')"
         ).fetchall()
         assert len(rows) >= 1
