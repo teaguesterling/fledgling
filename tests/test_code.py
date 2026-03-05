@@ -1,7 +1,7 @@
 """Tests for code intelligence macros (sitting_duck tier)."""
 
 import pytest
-from conftest import CONFTEST_PATH, PROJECT_ROOT
+from conftest import CONFTEST_PATH, PROJECT_ROOT, SQL_DIR
 
 
 class TestFindDefinitions:
@@ -111,3 +111,94 @@ class TestCodeStructure:
         ).fetchall()
         for row in rows:
             assert row[0] >= 1
+
+
+class TestComplexityHotspots:
+    def test_returns_results(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM complexity_hotspots(?)", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_columns(self, code_macros):
+        desc = code_macros.execute(
+            "DESCRIBE SELECT * FROM complexity_hotspots(?)", [CONFTEST_PATH]
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert col_names == [
+            "file_path", "name", "lines", "cyclomatic",
+            "conditionals", "loops", "return_count", "max_depth",
+        ]
+
+    def test_ordered_by_cyclomatic_desc(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT cyclomatic FROM complexity_hotspots(?)", [CONFTEST_PATH]
+        ).fetchall()
+        cc = [r[0] for r in rows]
+        assert cc == sorted(cc, reverse=True)
+
+    def test_limit(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM complexity_hotspots(?, 3)", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) == 3
+
+
+class TestFunctionCallers:
+    def test_finds_callers(self, code_macros):
+        # load_sql is called in conftest.py by fixture functions
+        rows = code_macros.execute(
+            "SELECT * FROM function_callers(?, 'load_sql')", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_columns(self, code_macros):
+        desc = code_macros.execute(
+            "DESCRIBE SELECT * FROM function_callers(?, 'load_sql')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert col_names == [
+            "file_path", "call_line", "caller_name", "caller_kind",
+        ]
+
+    def test_caller_is_enclosing_function(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT caller_name FROM function_callers(?, 'load_sql')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        callers = [r[0] for r in rows]
+        # load_sql is called from fixture functions like source_macros, code_macros, etc.
+        assert any("macros" in c for c in callers if c)
+
+    def test_no_duplicates(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT file_path, call_line FROM function_callers(?, 'load_sql')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        # Each (file, line) should appear exactly once
+        assert len(rows) == len(set(rows))
+
+
+class TestModuleDependencies:
+    """Tests for module_dependencies macro.
+
+    This macro is designed for package-level analysis (e.g. 'blq' imports
+    within a blq package). Fledgling's own test files don't form a package,
+    so we test column schema and empty-result behavior.
+    """
+
+    def test_columns(self, code_macros):
+        desc = code_macros.execute(
+            "DESCRIBE SELECT * FROM module_dependencies(?, 'nonexistent')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert col_names == ["source_module", "target_module", "fan_in"]
+
+    def test_no_matches_returns_empty(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM module_dependencies(?, 'nonexistent_pkg')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        assert len(rows) == 0

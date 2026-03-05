@@ -1,5 +1,6 @@
 """Tests for structural analysis macros (sitting_duck + duck_tails cross-tier)."""
 import pytest
+from conftest import CONFTEST_PATH, PROJECT_ROOT
 
 
 class TestStructuralDiff:
@@ -84,3 +85,44 @@ class TestStructuralDiff:
         assert by_name["mcp_server"][2] < 0
         # _create_mcp_server was added — positive delta
         assert by_name["_create_mcp_server"][2] > 0
+
+
+class TestChangedFunctionSummary:
+    def test_returns_functions_in_changed_files(self, structural_macros):
+        """Should return definitions from files that changed between revisions."""
+        rows = structural_macros.execute("""
+            SELECT * FROM changed_function_summary(
+                'HEAD~15', 'HEAD', ?
+            )
+        """, [PROJECT_ROOT + "/tests/**/*.py"]).fetchall()
+        assert len(rows) > 0
+
+    def test_columns(self, structural_macros):
+        desc = structural_macros.execute("""
+            DESCRIBE SELECT * FROM changed_function_summary(
+                'HEAD~15', 'HEAD', ?
+            )
+        """, [PROJECT_ROOT + "/tests/**/*.py"]).fetchall()
+        col_names = [r[0] for r in desc]
+        assert col_names == [
+            "file_path", "name", "kind", "lines",
+            "complexity", "change_status",
+        ]
+
+    def test_ordered_by_complexity_desc(self, structural_macros):
+        rows = structural_macros.execute("""
+            SELECT complexity FROM changed_function_summary(
+                'HEAD~15', 'HEAD', ?
+            )
+        """, [PROJECT_ROOT + "/tests/**/*.py"]).fetchall()
+        complexity = [r[0] for r in rows]
+        assert complexity == sorted(complexity, reverse=True)
+
+    def test_change_status_values(self, structural_macros):
+        rows = structural_macros.execute("""
+            SELECT DISTINCT change_status FROM changed_function_summary(
+                'HEAD~15', 'HEAD', ?
+            )
+        """, [PROJECT_ROOT + "/tests/**/*.py"]).fetchall()
+        statuses = {r[0] for r in rows}
+        assert statuses <= {"added", "modified"}
