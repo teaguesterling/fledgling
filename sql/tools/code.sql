@@ -15,8 +15,7 @@ SELECT mcp_publish_tool(
     'FindDefinitions',
     'AST-based definition search — not grep. Finds functions, classes, and variable definitions. Use name_pattern with SQL LIKE wildcards (%) to filter by name.',
     'SELECT * FROM find_definitions(
-        CASE WHEN $file_pattern[1] = ''/'' THEN $file_pattern
-             ELSE ''' || getvariable('session_root') || '/'' || $file_pattern END,
+        _resolve($file_pattern),
         COALESCE(NULLIF($name_pattern, ''null''), ''%'')
     )',
     '{"file_pattern": {"type": "string", "description": "Glob pattern for files to search (e.g. src/**/*.py)"}, "name_pattern": {"type": "string", "description": "SQL LIKE pattern to filter by name (e.g. parse%). Default: % (all)"}}',
@@ -28,8 +27,7 @@ SELECT mcp_publish_tool(
     'CodeStructure',
     'Top-level structural overview of source files: definitions with line counts. Shows what is defined in each file without implementation details.',
     'SELECT * FROM code_structure(
-        CASE WHEN $file_pattern[1] = ''/'' THEN $file_pattern
-             ELSE ''' || getvariable('session_root') || '/'' || $file_pattern END
+        _resolve($file_pattern)
     )',
     '{"file_pattern": {"type": "string", "description": "Glob pattern for files to analyze (e.g. src/**/*.py)"}}',
     '["file_pattern"]',

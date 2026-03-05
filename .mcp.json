@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "fledgling": {
-      "command": "sh",
+      "command": "./bin/fledgling",
       "args": [
-        "-c",
-        "exec duckdb -init init/init-fledgling.sql"
+        "serve"
       ],
       "cwd": "."
     },

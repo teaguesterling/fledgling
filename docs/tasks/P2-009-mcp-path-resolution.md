@@ -1,6 +1,6 @@
 # P2-009: MCP Path Resolution and Server Launch Cleanup
 
-**Status:** Not started
+**Status:** Complete
 **Priority:** P2 (required before production release)
 **Depends on:** P2-008 (MVP validation)
 
@@ -137,14 +137,34 @@ Evaluate in this order:
 5. **Option E as last resort** — template generation adds complexity that should
    be avoided unless nothing else works.
 
+## Approach Taken
+
+**Option B variant: literal-backed macros created externally.**
+
+`getvariable()` returns NULL in duckdb_mcp tool templates. DuckDB macros are
+lazy (text-substituted), so a macro calling `getvariable()` also fails.
+Table-backed macros (subquery approach) were ruled out because DuckDB table
+functions reject subqueries as arguments (quirk #10).
+
+Solution: `_resolve(p)` and `_session_root()` scalar macros with the session
+root baked in as a string literal. Created externally since DuckDB has no
+dynamic DDL:
+- `bin/fledgling` creates them via `duckdb -cmd` (bash variable expansion)
+- `conftest.py` creates them via `create_resolve_macros()` (Python interpolation)
+- `sandbox.sql` still defines `resolve()` for non-MCP contexts
+
+This replaced 9 inline CASE expressions across 3 tool files and 6 embedded
+`getvariable('session_root')` references in git tools. Also fixes a latent bug
+where relative repo paths in git tools would be silently dropped.
+
 ## Acceptance Criteria
 
-- [ ] Relative paths work in all tool templates without inline CASE expressions
-- [ ] `.mcp.json` does not require `sh -c` wrapper
-- [ ] `resolve()` or equivalent works in MCP tool execution context
-- [ ] All existing tests pass
-- [ ] CLAUDE.md updated to document the chosen approach
-- [ ] DuckDB quirk documented (or removed if upstream fixes land)
+- [x] Relative paths work in all tool templates without inline CASE expressions
+- [x] `.mcp.json` does not require `sh -c` wrapper
+- [x] `_resolve()` works in MCP tool execution context
+- [x] All existing tests pass (237/237)
+- [x] CLAUDE.md updated to document the chosen approach
+- [x] DuckDB quirks documented (#10 expanded, #15 added)
 
 ## Files Affected
 

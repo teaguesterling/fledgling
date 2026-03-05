@@ -17,7 +17,7 @@ SELECT mcp_publish_tool(
     'SELECT * FROM file_changes(
         $from_rev,
         $to_rev,
-        COALESCE(resolve(NULLIF($path, ''null'')), ''' || getvariable('session_root') || ''')
+        COALESCE(_resolve(NULLIF($path, ''null'')), _session_root())
     )',
     '{"from_rev": {"type": "string", "description": "Base revision (e.g. HEAD~1, main, commit hash)"}, "to_rev": {"type": "string", "description": "Target revision (e.g. HEAD, feature-branch)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
     '["from_rev", "to_rev"]',
@@ -30,7 +30,7 @@ SELECT mcp_publish_tool(
     'SELECT * FROM file_at_version(
         $file,
         $rev,
-        COALESCE(resolve(NULLIF($path, ''null'')), ''' || getvariable('session_root') || ''')
+        COALESCE(_resolve(NULLIF($path, ''null'')), _session_root())
     )',
     '{"file": {"type": "string", "description": "Repository-relative file path (e.g. README.md, sql/repo.sql)"}, "rev": {"type": "string", "description": "Git revision (e.g. HEAD, HEAD~1, main, v1.0, commit hash)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
     '["file", "rev"]',

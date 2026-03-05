@@ -1,14 +1,14 @@
 """Tests for path resolution and filesystem sandboxing.
 
-Verifies that resolve() correctly handles relative/absolute paths
-and that DuckDB's allowed_directories blocks access outside the
-project root.
+Verifies that resolve() and _resolve() correctly handle relative/absolute
+paths, that _resolve() works in MCP context (where getvariable returns NULL),
+and that DuckDB's allowed_directories blocks access outside the project root.
 """
 
 import duckdb
 import pytest
 
-from conftest import PROJECT_ROOT, CONFTEST_PATH, load_sql
+from conftest import PROJECT_ROOT, CONFTEST_PATH, load_sql, create_resolve_macros
 
 
 @pytest.fixture
@@ -17,6 +17,7 @@ def sandboxed():
     con = duckdb.connect(":memory:")
     con.execute("LOAD read_lines")
     con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
+    create_resolve_macros(con)
     load_sql(con, "sandbox.sql")
     # Lock down filesystem
     con.execute(f"SET allowed_directories = ['{PROJECT_ROOT}']")
@@ -32,6 +33,7 @@ def unsandboxed():
     con = duckdb.connect(":memory:")
     con.execute("LOAD read_lines")
     con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
+    create_resolve_macros(con)
     load_sql(con, "sandbox.sql")
     yield con
     con.close()
@@ -74,6 +76,63 @@ class TestResolve:
             "SELECT getvariable('session_root')"
         ).fetchone()[0]
         assert result == PROJECT_ROOT
+
+
+class TestLiteralResolve:
+    """Tests for _resolve() — literal-backed, works in MCP context."""
+
+    def test_relative_path_prepends_root(self, unsandboxed):
+        result = unsandboxed.execute(
+            "SELECT _resolve('README.md')"
+        ).fetchone()[0]
+        assert result == f"{PROJECT_ROOT}/README.md"
+
+    def test_absolute_path_passes_through(self, unsandboxed):
+        result = unsandboxed.execute(
+            "SELECT _resolve('/etc/hostname')"
+        ).fetchone()[0]
+        assert result == "/etc/hostname"
+
+    def test_null_returns_null(self, unsandboxed):
+        result = unsandboxed.execute(
+            "SELECT _resolve(NULL)"
+        ).fetchone()[0]
+        assert result is None
+
+    def test_works_when_getvariable_is_null(self, unsandboxed):
+        """Simulates MCP context where getvariable('session_root') is NULL."""
+        unsandboxed.execute("SET VARIABLE session_root = NULL")
+        result = unsandboxed.execute(
+            "SELECT _resolve('README.md')"
+        ).fetchone()[0]
+        assert result == f"{PROJECT_ROOT}/README.md"
+
+    def test_session_root_returns_root(self, unsandboxed):
+        result = unsandboxed.execute(
+            "SELECT _session_root()"
+        ).fetchone()[0]
+        assert result == PROJECT_ROOT
+
+    def test_session_root_works_when_getvariable_is_null(self, unsandboxed):
+        unsandboxed.execute("SET VARIABLE session_root = NULL")
+        result = unsandboxed.execute(
+            "SELECT _session_root()"
+        ).fetchone()[0]
+        assert result == PROJECT_ROOT
+
+    def test_coalesce_pattern_omitted_path(self, unsandboxed):
+        """COALESCE(_resolve(NULL), _session_root()) returns root."""
+        result = unsandboxed.execute(
+            "SELECT COALESCE(_resolve(NULL), _session_root())"
+        ).fetchone()[0]
+        assert result == PROJECT_ROOT
+
+    def test_coalesce_pattern_relative_path(self, unsandboxed):
+        """COALESCE(_resolve('subdir'), _session_root()) resolves."""
+        result = unsandboxed.execute(
+            "SELECT COALESCE(_resolve('subdir'), _session_root())"
+        ).fetchone()[0]
+        assert result == f"{PROJECT_ROOT}/subdir"
 
 
 class TestSandboxLockdown:
