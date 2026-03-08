@@ -150,17 +150,17 @@ def structural_macros(con):
 # Custom tools published in all profiles.
 # Many macros are available via the query tool without tool publications.
 V1_TOOLS = [
+    "ListFiles",
     "ReadLines",
+    "ProjectOverview",
+    "ReadAsTable",
     "FindDefinitions",
     "CodeStructure",
+    "MDOutline",
     "MDSection",
     "GitDiffSummary",
     "GitShow",
     "Help",
-    "ChatSessions",
-    "ChatSearch",
-    "ChatToolUsage",
-    "ChatDetail",
 ]
 
 
@@ -326,14 +326,11 @@ def _write_conversation_jsonl(base_dir):
     return jsonl_path
 
 
-def _create_mcp_server(profile, conv_jsonl_path=None):
+def _create_mcp_server(profile):
     """Create an MCP server connection with the given profile.
 
     Loads all extensions, macros, tool publications, then applies the
     profile SQL (which sets mcp_server_options) and starts the server.
-
-    If conv_jsonl_path is provided, bootstraps raw_conversations from it.
-    Otherwise creates an empty raw_conversations table.
 
     Does NOT enable filesystem lockdown (enable_external_access = false)
     because tests create tmp_path files outside the project root.
@@ -355,30 +352,6 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
     load_sql(con, "structural.sql")
-    # Conversation data
-    if conv_jsonl_path:
-        con.execute(f"""
-            CREATE TABLE raw_conversations AS
-            SELECT *, filename AS _source_file
-            FROM read_json_auto(
-                '{conv_jsonl_path}', union_by_name=true,
-                maximum_object_size=33554432, filename=true
-            )
-        """)
-    else:
-        con.execute("""
-            CREATE TABLE raw_conversations AS
-            SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
-                   NULL::VARCHAR AS type,
-                   NULL::STRUCT(role VARCHAR, content JSON, model VARCHAR, id VARCHAR, stop_reason VARCHAR, usage STRUCT(input_tokens BIGINT, output_tokens BIGINT, cache_creation_input_tokens BIGINT, cache_read_input_tokens BIGINT)) AS message,
-                   NULL::TIMESTAMP AS timestamp, NULL::VARCHAR AS requestId,
-                   NULL::VARCHAR AS slug, NULL::VARCHAR AS version,
-                   NULL::VARCHAR AS gitBranch, NULL::VARCHAR AS cwd,
-                   NULL::BOOLEAN AS isSidechain, NULL::BOOLEAN AS isMeta,
-                   NULL::VARCHAR AS parentUuid, NULL::VARCHAR AS _source_file
-            WHERE false
-        """)
-    load_sql(con, "conversations.sql")
     # Help system (materialize before lockdown, same as init script)
     materialize_help(con)
     load_sql(con, "help.sql")
@@ -386,7 +359,6 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
                       "tools/docs.sql", "tools/git.sql",
-                      "tools/conversations.sql",
                       "tools/help.sql"]:
         try:
             load_sql(con, tool_file)
@@ -409,9 +381,7 @@ def mcp_server(tmp_path_factory):
     read-only queries. Analyst profile matches the default init-fledgling.sql
     behavior (query, describe, list_tables enabled).
     """
-    base_dir = tmp_path_factory.mktemp("mcp")
-    jsonl_path = _write_conversation_jsonl(base_dir)
-    con = _create_mcp_server("profiles/analyst.sql", conv_jsonl_path=jsonl_path)
+    con = _create_mcp_server("profiles/analyst.sql")
     yield con
     con.close()
 

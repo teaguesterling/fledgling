@@ -8,16 +8,21 @@ Three layers:
 2. **SQL macros** (~30 Fledgling-defined) — composable vocabulary
 3. **MCP tool publications** (11 tools) — agent entry points
 
-## Current Tool Surface (after March 2026 trim)
+## Current Tool Surface
 
-**11 published tools:** ReadLines, FindDefinitions, CodeStructure, MDSection,
-GitDiffSummary, GitShow, Help, ChatSessions, ChatSearch, ChatToolUsage, ChatDetail
+**11 core tools (init-fledgling-base):**
+- Files: ListFiles, ReadLines, ProjectOverview, ReadAsTable
+- Code: FindDefinitions, CodeStructure
+- Docs: MDOutline, MDSection
+- Git: GitDiffSummary, GitShow
+- Help
 
-**17 query-only macros:** list_files, project_overview, read_as_table,
-find_calls, find_imports, complexity_hotspots, function_callers,
-module_dependencies, doc_outline, structural_diff, changed_function_summary,
-recent_changes, branch_list, tag_list, file_diff, working_tree_status,
-find_code_examples
+**4 conversation tools (init-fledgling-conversations, standalone):**
+ChatSessions, ChatSearch, ChatToolUsage, ChatDetail
+
+**Query-only macros:** complexity_hotspots, function_callers,
+module_dependencies, structural_diff, changed_function_summary,
+recent_changes, find_code_examples
 
 ## What's Unique
 
@@ -60,12 +65,11 @@ sitting_duck#37: SQL macro names show as 'CREATE', many entries have
 empty names. This makes CodeStructure and FindDefinitions nearly useless
 on SQL files specifically. Upstream fix needed.
 
-### 4. Chat tools placement
-These should eventually be duckdb_mcp examples, not part of Fledgling's
-core. However — see quartermaster-pattern.md — the conversation layer
-has a deeper purpose as the quartermaster's memory. This reframes the
-question: the tools belong in Fledgling, but their audience is the
-quartermaster, not the end user.
+### 4. Chat tools as standalone server
+Conversation tools extracted to `init/init-fledgling-conversations.sql` —
+a standalone MCP server that only needs duckdb_mcp. Can be composed with
+Fledgling profiles or run independently. The quartermaster's memory
+(see quartermaster-pattern.md) doesn't need code intelligence tools.
 
 ### 5. No plain text output format
 ReadLines and GitDiffFile use json interim format because duckdb_mcp#55
@@ -82,7 +86,7 @@ ReadLines and GitDiffFile use json interim format because duckdb_mcp#55
 
 ### Medium priority
 - Orient macro for single-call project understanding
-- Better error messages when glob matches no files
+- ~~Better error messages when glob matches no files~~ (done: #29)
 - Kit manifest format for quartermaster pattern
 
 ### Future considerations
