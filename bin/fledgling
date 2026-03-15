@@ -178,7 +178,10 @@ case "$COMMAND" in
             cmd+=(-cmd "SET VARIABLE extra_dirs = $FLEDGLING_EXTRA_DIRS")
         fi
 
-        cmd+=(-init "$INIT_FILE")
+        # Use -cmd ".read" instead of -init so the init file shares the
+        # same scope as the -cmd flags above. DuckDB 1.5.0 regression:
+        # -init runs in a separate scope that can't see -cmd state.
+        cmd+=(-cmd ".read $INIT_FILE")
 
         exec "${cmd[@]}"
         ;;
