@@ -117,7 +117,7 @@ def all_macros(con):
     con.execute("LOAD sitting_duck")
     con.execute("LOAD markdown")
     con.execute("LOAD duck_tails")
-    con.execute("SET VARIABLE fledgling_version = '0.1.0'")
+    con.execute("SET VARIABLE fledgling_version = '0.2.0'")
     con.execute("SET VARIABLE fledgling_profile = 'test'")
     con.execute("SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural']")
     load_sql(con, "dr_fledgling.sql")
