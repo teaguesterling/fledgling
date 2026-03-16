@@ -141,6 +141,38 @@
         .example .fn { color: #38bdf8; }
         .example .str { color: #86efac; }
 
+        h3.ref-heading {
+            font-size: 1rem;
+            margin: 1.5rem 0 0.5rem;
+        }
+        h3.ref-heading a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        h3.ref-heading a:hover { text-decoration: underline; }
+        table.ref {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+        table.ref td {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        table.ref td:first-child {
+            white-space: nowrap;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.8rem;
+            color: var(--accent);
+            width: 45%;
+        }
+        table.ref td:last-child {
+            color: var(--muted);
+        }
+        table.ref tr:last-child td { border-bottom: none; }
+
         .configurator {
             background: var(--card-bg);
             border: 1px solid var(--border);
@@ -223,35 +255,84 @@
         <li><strong>.mcp.json</strong> &mdash; MCP server config (merged with existing)</li>
     </ul>
 
-    <h2>Tools</h2>
+    <h2>MCP Tools</h2>
+    <p>These tools are exposed directly to the agent via MCP.</p>
     <div class="grid">
-        <div class="card">
-            <strong>ReadLines</strong>
-            <span>File content with line ranges, context, and match filtering</span>
-        </div>
-        <div class="card">
-            <strong>FindDefinitions</strong>
-            <span>AST-based search for functions, classes, variables (27 languages)</span>
-        </div>
-        <div class="card">
-            <strong>CodeStructure</strong>
-            <span>Top-level structural overview of source files</span>
-        </div>
-        <div class="card">
-            <strong>GitDiffSummary</strong>
-            <span>File-level change summary between revisions</span>
-        </div>
-        <div class="card">
-            <strong>MDSection</strong>
-            <span>Read markdown sections by ID</span>
-        </div>
-        <div class="card">
-            <strong>ChatSessions</strong>
-            <span>Browse and analyze Claude Code conversation logs</span>
-        </div>
+        <div class="card"><strong>ReadLines</strong><span>File content with line ranges, context, and match filtering</span></div>
+        <div class="card"><strong>FindDefinitions</strong><span>AST-based search for functions, classes, variables (27 languages)</span></div>
+        <div class="card"><strong>CodeStructure</strong><span>Top-level structural overview of source files</span></div>
+        <div class="card"><strong>GitDiffSummary</strong><span>File-level change summary between revisions</span></div>
+        <div class="card"><strong>GitShow</strong><span>File content at a specific git revision</span></div>
+        <div class="card"><strong>MDSection</strong><span>Read markdown sections by ID</span></div>
+        <div class="card"><strong>ChatSessions</strong><span>Browse Claude Code conversation sessions</span></div>
+        <div class="card"><strong>ChatSearch</strong><span>Full-text search across conversations</span></div>
+        <div class="card"><strong>ChatToolUsage</strong><span>Tool usage frequency analysis</span></div>
+        <div class="card"><strong>ChatDetail</strong><span>Deep view of a single session</span></div>
+        <div class="card"><strong>Help</strong><span>Built-in skill guide for the agent</span></div>
     </div>
 
-    <p>Plus 20+ composable SQL macros available via the query tool.</p>
+    <h2>SQL Macros</h2>
+    <p>Available via the <strong>query</strong> tool (analyst profile). Composable with joins, filters, and aggregations.</p>
+
+    <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/source.md">Files</a></h3>
+    <table class="ref">
+        <tr><td><code>list_files(pattern)</code></td><td>Find files by glob pattern</td></tr>
+        <tr><td><code>read_source(path, lines, ctx, match)</code></td><td>Read file with line ranges and filtering</td></tr>
+        <tr><td><code>read_source_batch(pattern, lines, ctx)</code></td><td>Read multiple files by glob</td></tr>
+        <tr><td><code>read_context(path, center_line, ctx)</code></td><td>Read lines around a target line</td></tr>
+        <tr><td><code>file_line_count(pattern)</code></td><td>Line counts per file</td></tr>
+        <tr><td><code>project_overview(root)</code></td><td>File counts by language</td></tr>
+        <tr><td><code>read_as_table(path, lim)</code></td><td>Preview CSV/JSON as a table</td></tr>
+    </table>
+
+    <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/code.md">Code</a></h3>
+    <table class="ref">
+        <tr><td><code>find_definitions(pattern, name)</code></td><td>AST search for functions, classes, variables</td></tr>
+        <tr><td><code>find_calls(pattern, name)</code></td><td>Find function call sites</td></tr>
+        <tr><td><code>find_imports(pattern)</code></td><td>Find import statements</td></tr>
+        <tr><td><code>code_structure(pattern)</code></td><td>Top-level definitions per file</td></tr>
+        <tr><td><code>complexity_hotspots(pattern, n)</code></td><td>Functions ranked by cyclomatic complexity</td></tr>
+        <tr><td><code>function_callers(pattern, name)</code></td><td>Who calls a given function</td></tr>
+        <tr><td><code>module_dependencies(pattern, pkg)</code></td><td>Internal import graph with fan-in</td></tr>
+    </table>
+
+    <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/docs.md">Docs</a></h3>
+    <table class="ref">
+        <tr><td><code>doc_outline(pattern, max_lvl)</code></td><td>Markdown table of contents</td></tr>
+        <tr><td><code>read_doc_section(path, id)</code></td><td>Read a markdown section by ID</td></tr>
+        <tr><td><code>find_code_examples(pattern, lang)</code></td><td>Extract fenced code blocks</td></tr>
+        <tr><td><code>doc_stats(pattern)</code></td><td>Word/section/code-block counts</td></tr>
+    </table>
+
+    <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/repo.md">Git</a></h3>
+    <table class="ref">
+        <tr><td><code>recent_changes(n, repo)</code></td><td>Commit history</td></tr>
+        <tr><td><code>branch_list(repo)</code></td><td>List branches</td></tr>
+        <tr><td><code>tag_list(repo)</code></td><td>List tags</td></tr>
+        <tr><td><code>repo_files(rev, repo)</code></td><td>Files in a git tree</td></tr>
+        <tr><td><code>file_at_version(file, rev, repo)</code></td><td>File content at a revision</td></tr>
+        <tr><td><code>file_changes(from, to, repo)</code></td><td>Files changed between revisions</td></tr>
+        <tr><td><code>file_diff(file, from, to, repo)</code></td><td>Line-level unified diff</td></tr>
+        <tr><td><code>working_tree_status(repo)</code></td><td>Untracked/deleted files</td></tr>
+        <tr><td><code>structural_diff(file, from, to)</code></td><td>Semantic diff: added/removed/modified definitions</td></tr>
+        <tr><td><code>changed_function_summary(from, to, pattern)</code></td><td>Changed functions ranked by complexity</td></tr>
+    </table>
+
+    <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/conversations.md">Conversations</a></h3>
+    <table class="ref">
+        <tr><td><code>sessions()</code></td><td>One row per Claude Code session</td></tr>
+        <tr><td><code>messages()</code></td><td>Flattened user + assistant messages</td></tr>
+        <tr><td><code>content_blocks()</code></td><td>Unnested assistant content blocks</td></tr>
+        <tr><td><code>tool_calls()</code></td><td>Extracted tool_use blocks</td></tr>
+        <tr><td><code>tool_results()</code></td><td>Matched tool_result blocks</td></tr>
+        <tr><td><code>token_usage()</code></td><td>Per-message token consumption</td></tr>
+        <tr><td><code>tool_frequency()</code></td><td>Tool usage counts</td></tr>
+        <tr><td><code>bash_commands()</code></td><td>Parsed bash commands with categories</td></tr>
+        <tr><td><code>session_summary()</code></td><td>Dashboard view with all stats</td></tr>
+        <tr><td><code>model_usage()</code></td><td>Token consumption by model</td></tr>
+        <tr><td><code>search_messages(term)</code></td><td>Full-text search across content</td></tr>
+        <tr><td><code>search_tool_inputs(term)</code></td><td>Search within tool parameters</td></tr>
+    </table>
 
     <h2>SQL macros, not bash</h2>
     <div class="example"><span class="comment">-- Instead of: grep -rn "def parse" src/</span>
