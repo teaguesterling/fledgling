@@ -141,6 +141,51 @@
         .example .fn { color: #38bdf8; }
         .example .str { color: #86efac; }
 
+        .configurator {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin: 1rem 0;
+        }
+        .config-section { margin-bottom: 1rem; }
+        .config-section:last-child { margin-bottom: 0; }
+        .config-label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .module-grid, .profile-toggle {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.35rem 0.65rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: border-color 0.15s, background 0.15s;
+            user-select: none;
+        }
+        .chip:hover { border-color: var(--accent); }
+        .chip:has(input:checked) {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+        }
+        .chip input { display: none; }
+        .chip span:first-of-type { font-weight: 500; }
+        .chip-desc { color: var(--muted); font-size: 0.8rem; }
+
         footer {
             margin-top: 3rem;
             padding-top: 1.5rem;
@@ -216,17 +261,33 @@
 <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">changed_function_summary</span>(<span class="str">'HEAD~5'</span>, <span class="str">'HEAD'</span>, <span class="str">'**/*.py'</span>);</div>
 
     <h2>Customize</h2>
-    <div class="install-box">
-        <code><span class="comment"># Select specific modules and profile</span>
-curl -sL https://teaguesterling.github.io/fledgling/install.sql \
-  | duckdb -cmd "SET VARIABLE fledgling_config = {
-      modules: ['source', 'code', 'repo'],
-      profile: 'core'
-  }"</code>
+
+    <div class="configurator">
+        <div class="config-section">
+            <label class="config-label">Modules</label>
+            <div class="module-grid">
+                <label class="chip"><input type="checkbox" value="source" checked onchange="updateCommand()"><span>source</span><span class="chip-desc">file access</span></label>
+                <label class="chip"><input type="checkbox" value="code" checked onchange="updateCommand()"><span>code</span><span class="chip-desc">AST analysis</span></label>
+                <label class="chip"><input type="checkbox" value="docs" checked onchange="updateCommand()"><span>docs</span><span class="chip-desc">markdown</span></label>
+                <label class="chip"><input type="checkbox" value="repo" checked onchange="updateCommand()"><span>repo</span><span class="chip-desc">git state</span></label>
+                <label class="chip"><input type="checkbox" value="structural" checked onchange="updateCommand()"><span>structural</span><span class="chip-desc">code + git</span></label>
+                <label class="chip"><input type="checkbox" value="conversations" checked onchange="updateCommand()"><span>conversations</span><span class="chip-desc">chat logs</span></label>
+                <label class="chip"><input type="checkbox" value="help" checked onchange="updateCommand()"><span>help</span><span class="chip-desc">skill guide</span></label>
+            </div>
+        </div>
+        <div class="config-section">
+            <label class="config-label">Profile</label>
+            <div class="profile-toggle">
+                <label class="chip"><input type="radio" name="profile" value="analyst" checked onchange="updateCommand()"><span>analyst</span><span class="chip-desc">+ SQL query tool</span></label>
+                <label class="chip"><input type="radio" name="profile" value="core" onchange="updateCommand()"><span>core</span><span class="chip-desc">structured only</span></label>
+            </div>
+        </div>
     </div>
 
-    <p>Available modules: source, code, docs, repo, structural, conversations, help.</p>
-    <p>Profiles: <strong>analyst</strong> (default, includes SQL query tool) or <strong>core</strong> (structured tools only).</p>
+    <div class="install-box" id="custom-install">
+        <button class="copy" onclick="copyCommand()">copy</button>
+        <code id="install-command">curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
+    </div>
 
     <footer>
         <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
@@ -235,5 +296,54 @@ curl -sL https://teaguesterling.github.io/fledgling/install.sql \
         <a href="https://modelcontextprotocol.io">MCP</a>
     </footer>
 </div>
+<script>
+const ALL_MODULES = ['source','code','docs','repo','structural','conversations','help'];
+const BASE = 'curl -sL https://teaguesterling.github.io/fledgling/install.sql';
+
+function getSelected() {
+    const modules = [...document.querySelectorAll('.module-grid input:checked')].map(e => e.value);
+    const profile = document.querySelector('input[name="profile"]:checked').value;
+    return { modules, profile };
+}
+
+function isDefault(sel) {
+    return sel.profile === 'analyst'
+        && sel.modules.length === ALL_MODULES.length
+        && ALL_MODULES.every(m => sel.modules.includes(m));
+}
+
+function buildCommand(sel) {
+    if (isDefault(sel)) return BASE + ' | duckdb';
+
+    const parts = [];
+    if (sel.modules.length !== ALL_MODULES.length || !ALL_MODULES.every(m => sel.modules.includes(m))) {
+        parts.push("modules: ['" + sel.modules.join("', '") + "']");
+    }
+    if (sel.profile !== 'analyst') {
+        parts.push("profile: '" + sel.profile + "'");
+    }
+
+    if (parts.length === 0) return BASE + ' | duckdb';
+
+    return BASE + ' \\\n  | duckdb -cmd "SET VARIABLE fledgling_config = {\n      '
+        + parts.join(',\n      ') + '\n  }"';
+}
+
+function updateCommand() {
+    const sel = getSelected();
+    const cmd = buildCommand(sel);
+    document.getElementById('install-command').textContent = cmd;
+}
+
+function copyCommand() {
+    const text = document.getElementById('install-command').textContent;
+    navigator.clipboard.writeText(text);
+    const btn = document.querySelector('#custom-install .copy');
+    btn.textContent = 'copied';
+    setTimeout(() => btn.textContent = 'copy', 1500);
+}
+
+updateCommand();
+</script>
 </body>
 </html>
