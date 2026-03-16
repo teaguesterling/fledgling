@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fledgling — MCP tools for AI coding agents</title>
+    <style>
+        :root {
+            --bg: #fafaf9;
+            --fg: #1c1917;
+            --muted: #78716c;
+            --accent: #ea580c;
+            --code-bg: #1c1917;
+            --code-fg: #e7e5e4;
+            --border: #d6d3d1;
+            --card-bg: #ffffff;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1c1917;
+                --fg: #e7e5e4;
+                --muted: #a8a29e;
+                --accent: #fb923c;
+                --code-bg: #0c0a09;
+                --code-fg: #e7e5e4;
+                --border: #44403c;
+                --card-bg: #292524;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+        }
+        .container { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem; }
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+        h1 span { color: var(--accent); }
+        .tagline { color: var(--muted); font-size: 1.1rem; margin-bottom: 2.5rem; }
+        h2 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+        p { margin-bottom: 1rem; }
+
+        .install-box {
+            background: var(--code-bg);
+            color: var(--code-fg);
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            margin: 1.5rem 0;
+            position: relative;
+            overflow-x: auto;
+        }
+        .install-box code {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.9rem;
+            white-space: pre;
+        }
+        .install-box .comment { color: #78716c; }
+        .install-box .copy {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: transparent;
+            border: 1px solid #57534e;
+            color: #a8a29e;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-family: inherit;
+        }
+        .install-box .copy:hover { color: #e7e5e4; border-color: #78716c; }
+
+        .prereq {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        .prereq code {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            background: var(--code-bg);
+            color: var(--code-fg);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin: 1rem 0;
+        }
+        @media (max-width: 500px) { .grid { grid-template-columns: 1fr; } }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .card strong { display: block; margin-bottom: 0.25rem; }
+        .card span { color: var(--muted); font-size: 0.9rem; }
+
+        .what-you-get {
+            margin: 1.5rem 0;
+        }
+        .what-you-get li {
+            margin-bottom: 0.5rem;
+            list-style: none;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .what-you-get li::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0.5rem;
+            width: 0.5rem;
+            height: 0.5rem;
+            background: var(--accent);
+            border-radius: 50%;
+        }
+
+        .example {
+            background: var(--code-bg);
+            color: var(--code-fg);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 0.75rem 0;
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.5;
+        }
+        .example .comment { color: #78716c; }
+        .example .kw { color: #fb923c; }
+        .example .fn { color: #38bdf8; }
+        .example .str { color: #86efac; }
+
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+        footer a { color: var(--accent); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1><span>Fledgling</span></h1>
+    <p class="tagline">MCP tools that help AI agents get their bearings in a codebase, powered by DuckDB.</p>
+
+    <h2>Install</h2>
+    <div class="install-box">
+        <button class="copy" onclick="navigator.clipboard.writeText('curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb')">copy</button>
+        <code>curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
+    </div>
+
+    <p>Run from your project root. Creates three files and you're done.</p>
+
+    <div class="prereq">
+        Requires <code>duckdb</code> CLI (v1.4+). Install:
+        <code>brew install duckdb</code> or see
+        <a href="https://duckdb.org/docs/installation/" style="color: var(--accent)">duckdb.org</a>.
+    </div>
+
+    <h2>What you get</h2>
+    <ul class="what-you-get">
+        <li><strong>.fledgling-init.sql</strong> &mdash; self-contained DuckDB init with all modules</li>
+        <li><strong>.fledgling-help.md</strong> &mdash; skill guide for the agent</li>
+        <li><strong>.mcp.json</strong> &mdash; MCP server config (merged with existing)</li>
+    </ul>
+
+    <h2>Tools</h2>
+    <div class="grid">
+        <div class="card">
+            <strong>ReadLines</strong>
+            <span>File content with line ranges, context, and match filtering</span>
+        </div>
+        <div class="card">
+            <strong>FindDefinitions</strong>
+            <span>AST-based search for functions, classes, variables (27 languages)</span>
+        </div>
+        <div class="card">
+            <strong>CodeStructure</strong>
+            <span>Top-level structural overview of source files</span>
+        </div>
+        <div class="card">
+            <strong>GitDiffSummary</strong>
+            <span>File-level change summary between revisions</span>
+        </div>
+        <div class="card">
+            <strong>MDSection</strong>
+            <span>Read markdown sections by ID</span>
+        </div>
+        <div class="card">
+            <strong>ChatSessions</strong>
+            <span>Browse and analyze Claude Code conversation logs</span>
+        </div>
+    </div>
+
+    <p>Plus 20+ composable SQL macros available via the query tool.</p>
+
+    <h2>SQL macros, not bash</h2>
+    <div class="example"><span class="comment">-- Instead of: grep -rn "def parse" src/</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">find_definitions</span>(<span class="str">'src/**/*.py'</span>, <span class="str">'%parse%'</span>);
+
+<span class="comment">-- Cross-tier: definitions in recently changed files</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">changed_function_summary</span>(<span class="str">'HEAD~5'</span>, <span class="str">'HEAD'</span>, <span class="str">'**/*.py'</span>);</div>
+
+    <h2>Customize</h2>
+    <div class="install-box">
+        <code><span class="comment"># Select specific modules and profile</span>
+curl -sL https://teaguesterling.github.io/fledgling/install.sql \
+  | duckdb -cmd "SET VARIABLE fledgling_config = {
+      modules: ['source', 'code', 'repo'],
+      profile: 'core'
+  }"</code>
+    </div>
+
+    <p>Available modules: source, code, docs, repo, structural, conversations, help.</p>
+    <p>Profiles: <strong>analyst</strong> (default, includes SQL query tool) or <strong>core</strong> (structured tools only).</p>
+
+    <footer>
+        <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
+        MIT License &middot;
+        Built on <a href="https://duckdb.org">DuckDB</a> +
+        <a href="https://modelcontextprotocol.io">MCP</a>
+    </footer>
+</div>
+</body>
+</html>
