@@ -234,10 +234,31 @@
     <h1><span>Fledgling</span></h1>
     <p class="tagline">MCP tools that help AI agents get their bearings in a codebase, powered by DuckDB.</p>
 
-    <h2>Install</h2>
-    <div class="install-box">
-        <button class="copy" onclick="navigator.clipboard.writeText('curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb')">copy</button>
-        <code>curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
+    <div class="configurator">
+        <div class="config-section">
+            <label class="config-label">Modules</label>
+            <div class="module-grid">
+                <label class="chip"><input type="checkbox" value="source" checked onchange="updateCommand()"><span>source</span><span class="chip-desc">file access</span></label>
+                <label class="chip"><input type="checkbox" value="code" checked onchange="updateCommand()"><span>code</span><span class="chip-desc">AST analysis</span></label>
+                <label class="chip"><input type="checkbox" value="docs" checked onchange="updateCommand()"><span>docs</span><span class="chip-desc">markdown</span></label>
+                <label class="chip"><input type="checkbox" value="repo" checked onchange="updateCommand()"><span>repo</span><span class="chip-desc">git state</span></label>
+                <label class="chip"><input type="checkbox" value="structural" checked onchange="updateCommand()"><span>structural</span><span class="chip-desc">code + git</span></label>
+                <label class="chip"><input type="checkbox" value="conversations" checked onchange="updateCommand()"><span>conversations</span><span class="chip-desc">chat logs</span></label>
+                <label class="chip"><input type="checkbox" value="help" checked onchange="updateCommand()"><span>help</span><span class="chip-desc">skill guide</span></label>
+            </div>
+        </div>
+        <div class="config-section">
+            <label class="config-label">Profile</label>
+            <div class="profile-toggle">
+                <label class="chip"><input type="radio" name="profile" value="analyst" checked onchange="updateCommand()"><span>analyst</span><span class="chip-desc">+ SQL query tool</span></label>
+                <label class="chip"><input type="radio" name="profile" value="core" onchange="updateCommand()"><span>core</span><span class="chip-desc">structured only</span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="install-box" id="custom-install">
+        <button class="copy" onclick="copyCommand()">copy</button>
+        <code id="install-command">curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
     </div>
 
     <p>Run from your project root. Creates three files and you're done.</p>
@@ -341,34 +362,6 @@
 <span class="comment">-- Cross-tier: definitions in recently changed files</span>
 <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">changed_function_summary</span>(<span class="str">'HEAD~5'</span>, <span class="str">'HEAD'</span>, <span class="str">'**/*.py'</span>);</div>
 
-    <h2>Customize</h2>
-
-    <div class="configurator">
-        <div class="config-section">
-            <label class="config-label">Modules</label>
-            <div class="module-grid">
-                <label class="chip"><input type="checkbox" value="source" checked onchange="updateCommand()"><span>source</span><span class="chip-desc">file access</span></label>
-                <label class="chip"><input type="checkbox" value="code" checked onchange="updateCommand()"><span>code</span><span class="chip-desc">AST analysis</span></label>
-                <label class="chip"><input type="checkbox" value="docs" checked onchange="updateCommand()"><span>docs</span><span class="chip-desc">markdown</span></label>
-                <label class="chip"><input type="checkbox" value="repo" checked onchange="updateCommand()"><span>repo</span><span class="chip-desc">git state</span></label>
-                <label class="chip"><input type="checkbox" value="structural" checked onchange="updateCommand()"><span>structural</span><span class="chip-desc">code + git</span></label>
-                <label class="chip"><input type="checkbox" value="conversations" checked onchange="updateCommand()"><span>conversations</span><span class="chip-desc">chat logs</span></label>
-                <label class="chip"><input type="checkbox" value="help" checked onchange="updateCommand()"><span>help</span><span class="chip-desc">skill guide</span></label>
-            </div>
-        </div>
-        <div class="config-section">
-            <label class="config-label">Profile</label>
-            <div class="profile-toggle">
-                <label class="chip"><input type="radio" name="profile" value="analyst" checked onchange="updateCommand()"><span>analyst</span><span class="chip-desc">+ SQL query tool</span></label>
-                <label class="chip"><input type="radio" name="profile" value="core" onchange="updateCommand()"><span>core</span><span class="chip-desc">structured only</span></label>
-            </div>
-        </div>
-    </div>
-
-    <div class="install-box" id="custom-install">
-        <button class="copy" onclick="copyCommand()">copy</button>
-        <code id="install-command">curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
-    </div>
 
     <footer>
         <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
