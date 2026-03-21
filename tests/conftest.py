@@ -223,10 +223,11 @@ def md_row_count(text):
 
 
 def parse_json_rows(text, keys):
-    """Parse duckdb_mcp JSON array output using known column structure.
+    """Parse duckdb_mcp JSON array output.
 
-    Works around duckdb_mcp#52 (unescaped double quotes in string values)
-    by splitting on known key-name delimiters rather than JSON string parsing.
+    Tries json.loads first (works with duckdb_mcp >= 517383c which fixed
+    quote escaping). Falls back to delimiter-based splitting for older
+    builds (duckdb_mcp#52 workaround).
 
     Args:
         text: JSON array string from duckdb_mcp tool output
@@ -235,29 +236,33 @@ def parse_json_rows(text, keys):
     Returns:
         List of dicts mapping column names to string values
     """
+    import json as _json
     text = text.strip()
     if text == "[]":
         return []
 
-    inner = text[1:-1]  # Strip outer [ and ]
+    # Try standard JSON parsing first
+    try:
+        rows = _json.loads(text)
+        # Coerce all values to strings for backward compat with tests
+        return [{k: str(v) if v is not None else None for k, v in row.items()} for row in rows]
+    except _json.JSONDecodeError:
+        pass
+
+    # Fallback: delimiter-based parsing (duckdb_mcp#52 workaround)
+    inner = text[1:-1]
     first_key = keys[0]
 
-    # Split into individual objects using the first key as boundary.
-    # Separator between objects: },{"first_key":"
     obj_sep = '},{"' + first_key + '":"'
     parts = inner.split(obj_sep)
 
     rows = []
     for i, part in enumerate(parts):
-        # Reconstruct complete object text for each part:
-        # - part[0] is missing its closing }
-        # - part[i>0] is missing its opening {"first_key":"
         if i == 0:
             part = part + "}"
         else:
             part = '{"' + first_key + '":"' + part
 
-        # Strip outer { }
         obj = part[1:-1]
 
         row = {}
@@ -270,12 +275,10 @@ def parse_json_rows(text, keys):
             val_start = idx + len(key_pat)
 
             if j < len(keys) - 1:
-                # Value runs until the next key's delimiter: ","next_key":"
                 next_pat = '","' + keys[j + 1] + '":"'
                 val_end = obj.find(next_pat, val_start)
                 row[key] = obj[val_start:val_end] if val_end != -1 else obj[val_start:]
             else:
-                # Last key: value runs to end of object, minus closing "
                 row[key] = obj[val_start:-1]
 
         rows.append(row)

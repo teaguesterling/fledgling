@@ -14,6 +14,7 @@ import pytest
 from conftest import (
     CONFTEST_PATH, SPEC_PATH, V1_TOOLS,
     call_tool, json_row_count, list_tools, md_row_count, parse_json_rows,
+    text_line_count,
 )
 
 # sitting_duck test data for multi-language coverage.
@@ -60,17 +61,19 @@ class TestToolDiscovery:
 
 
 class TestReadLines:
+    """ReadLines uses text format: each line is '  NN  content'."""
+
     def test_reads_whole_file(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {"file_path": CONFTEST_PATH})
         assert "import pytest" in text
-        assert json_row_count(text) > 50
+        assert text_line_count(text) > 50
 
     def test_reads_line_range(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
             "file_path": CONFTEST_PATH,
             "lines": "1-5",
         })
-        assert json_row_count(text) == 5
+        assert text_line_count(text) == 5
 
     def test_reads_with_context(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
@@ -78,18 +81,17 @@ class TestReadLines:
             "lines": "10",
             "ctx": "2",
         })
-        assert json_row_count(text) == 5  # line 10 ± 2
+        assert text_line_count(text) == 5  # line 10 ± 2
 
     def test_reads_with_match(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
             "file_path": CONFTEST_PATH,
             "match": "import",
         })
-        rows = parse_json_rows(text, ["line_number", "content"])
-        assert len(rows) > 0
-        # Every returned row should contain the match term
-        for row in rows:
-            assert "import" in row["content"].lower()
+        lines = [l for l in text.strip().split("\n") if l.strip()]
+        assert len(lines) > 0
+        for line in lines:
+            assert "import" in line.lower()
 
     def test_reads_git_version(self, mcp_server):
         text = call_tool(mcp_server, "ReadLines", {
@@ -104,9 +106,9 @@ class TestReadLines:
             "lines": "1-20",
             "match": "import",
         })
-        rows = json_row_count(text)
-        assert rows > 0
-        assert rows < 20
+        count = text_line_count(text)
+        assert count > 0
+        assert count < 20
 
 
 # -- Code --
