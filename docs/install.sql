@@ -28,19 +28,22 @@ SET VARIABLE _default_modules = ['source', 'code', 'docs', 'repo',
 SET VARIABLE _default_profile = 'analyst';
 
 -- Read user config (set via -cmd before stdin)
--- When fledgling_config is not set, getvariable returns NULL.
--- Struct field access on NULL fails (DuckDB treats it as a table ref),
--- so we guard with CASE.
+-- DuckDB structs are typed: {modules: [...]} has no .profile field, so
+-- accessing it is a binder error (not NULL). Cast to JSON for safe access.
+SET VARIABLE _config_json = CASE
+    WHEN getvariable('fledgling_config') IS NOT NULL
+    THEN getvariable('fledgling_config')::JSON
+    ELSE NULL END;
+
 SET VARIABLE _selected_modules = COALESCE(
-    CASE WHEN getvariable('fledgling_config') IS NOT NULL
-         THEN getvariable('fledgling_config').modules
+    CASE WHEN getvariable('_config_json') IS NOT NULL
+         AND json_type(getvariable('_config_json'), 'modules') = 'ARRAY'
+         THEN json_extract_string(getvariable('_config_json'), 'modules')::VARCHAR[]
          ELSE NULL END,
     getvariable('_default_modules')
 );
 SET VARIABLE _profile = COALESCE(
-    CASE WHEN getvariable('fledgling_config') IS NOT NULL
-         THEN getvariable('fledgling_config').profile
-         ELSE NULL END,
+    json_extract_string(getvariable('_config_json'), '$.profile'),
     getvariable('_default_profile')
 );
 
@@ -189,7 +192,7 @@ CREATE OR REPLACE MACRO _fledgling_footer(root, profile) AS
     END
     || E'\n'
     || E'.output\n'
-    || 'SELECT mcp_server_start(json(getvariable(''mcp_server_options'')));' || E'\n';
+    || 'SELECT mcp_server_start(COALESCE(getvariable(''transport''), ''stdio''), getvariable(''mcp_server_options''));' || E'\n';
 
 -- ── 7. Write output files ────────────────────────────────────────────
 
