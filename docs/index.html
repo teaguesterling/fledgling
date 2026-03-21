@@ -254,6 +254,12 @@
                 <label class="chip"><input type="radio" name="profile" value="core" onchange="updateCommand()"><span>core</span><span class="chip-desc">structured only</span></label>
             </div>
         </div>
+        <div class="config-section">
+            <label class="config-label">Options</label>
+            <div class="profile-toggle">
+                <label class="chip"><input type="checkbox" id="cli-check" onchange="updateCommand()"><span>CLI tool</span><span class="chip-desc">human-friendly terminal commands</span></label>
+            </div>
+        </div>
     </div>
 
     <div class="install-box" id="custom-install">
@@ -363,6 +369,33 @@
 <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">changed_function_summary</span>(<span class="str">'HEAD~5'</span>, <span class="str">'HEAD'</span>, <span class="str">'**/*.py'</span>);</div>
 
 
+    <h2>CLI for humans</h2>
+    <p>Enable the <strong>CLI tool</strong> option above to also install a terminal interface.
+       Same macros, same data — no MCP required.</p>
+
+    <div class="example"><span class="comment"># List commands and their arguments</span>
+$ fledgling help
+
+<span class="comment"># Search for function definitions</span>
+$ fledgling find-definitions <span class="str">'src/**/*.py'</span> <span class="str">'%parse%'</span>
+
+<span class="comment"># Recent git history, specific columns</span>
+$ fledgling recent-changes 10 -c hash,message
+
+<span class="comment"># Named parameters</span>
+$ fledgling list-files <span class="str">'**/*.py'</span> --commit=HEAD~1
+
+<span class="comment"># Output as CSV or JSON</span>
+$ fledgling code-structure <span class="str">'lib/**/*.rs'</span> -f csv
+
+<span class="comment"># Raw SQL passthrough</span>
+$ fledgling query <span class="str">"SELECT * FROM sessions() LIMIT 5"</span></div>
+
+    <p>After installing, move the CLI to your PATH:</p>
+    <div class="install-box">
+        <code>chmod +x .fledgling-cli && mv .fledgling-cli ~/.local/bin/fledgling</code>
+    </div>
+
     <footer>
         <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
         MIT License &middot;
@@ -377,11 +410,13 @@ const BASE = 'curl -sL https://teaguesterling.github.io/fledgling/install.sql';
 function getSelected() {
     const modules = [...document.querySelectorAll('.module-grid input:checked')].map(e => e.value);
     const profile = document.querySelector('input[name="profile"]:checked').value;
-    return { modules, profile };
+    const cli = document.getElementById('cli-check').checked;
+    return { modules, profile, cli };
 }
 
 function isDefault(sel) {
     return sel.profile === 'analyst'
+        && !sel.cli
         && sel.modules.length === ALL_MODULES.length
         && ALL_MODULES.every(m => sel.modules.includes(m));
 }
@@ -395,6 +430,9 @@ function buildCommand(sel) {
     }
     if (sel.profile !== 'analyst') {
         parts.push("profile: '" + sel.profile + "'");
+    }
+    if (sel.cli) {
+        parts.push("cli: true");
     }
 
     if (parts.length === 0) return BASE + ' | duckdb';

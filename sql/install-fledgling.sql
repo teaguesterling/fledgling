@@ -46,6 +46,10 @@ SET VARIABLE _profile = COALESCE(
     json_extract_string(getvariable('_config_json'), '$.profile'),
     getvariable('_default_profile')
 );
+SET VARIABLE _install_cli = COALESCE(
+    json_extract_string(getvariable('_config_json'), '$.cli') = 'true',
+    false
+);
 
 -- ── 3. Module registry ───────────────────────────────────────────────
 
@@ -136,7 +140,7 @@ CREATE TABLE _tools AS
 SELECT * FROM query(
     CASE WHEN len(getvariable('_tool_urls')) > 0
     THEN 'SELECT * FROM read_text(getvariable(''_tool_urls''))'
-    ELSE 'SELECT NULL::VARCHAR AS filename, NULL::VARCHAR AS content, NULL::BIGINT AS size WHERE false'
+    ELSE 'SELECT * FROM read_text([]::VARCHAR[]) WHERE false'
     END
 );
 
@@ -150,7 +154,7 @@ CREATE TABLE _resources AS
 SELECT * FROM query(
     CASE WHEN len(getvariable('_resource_urls')) > 0
     THEN 'SELECT * FROM read_text(getvariable(''_resource_urls''))'
-    ELSE 'SELECT NULL::VARCHAR AS filename, NULL::VARCHAR AS content, NULL::BIGINT AS size WHERE false'
+    ELSE 'SELECT * FROM read_text([]::VARCHAR[]) WHERE false'
     END
 );
 
@@ -196,6 +200,28 @@ CREATE OR REPLACE MACRO _fledgling_footer(root, profile) AS
 
 -- ── 7. Write output files ────────────────────────────────────────────
 
+-- Show what will be written before doing it
+.output
+.mode list
+.separator ""
+.headers off
+SELECT unnest([line FOR line IN [
+    '',
+    'Installing Fledgling ' || getvariable('_version') || ' in ' || getenv('PWD'),
+    '',
+    '  Will write:',
+    '    .fledgling-init.sql  — DuckDB init script (all macros + tools)',
+    '    .fledgling-help.md   — skill guide for the agent',
+    CASE WHEN getvariable('_has_mcp_json')
+        THEN '    .mcp.json            — merge fledgling server into existing config'
+        ELSE '    .mcp.json            — create MCP server config' END,
+    CASE WHEN getvariable('_install_cli')
+        THEN '    .fledgling-cli       — CLI wrapper (move to ~/.local/bin/fledgling)'
+        ELSE NULL END,
+    ''
+] IF line IS NOT NULL]) AS info;
+.output /dev/null
+
 -- Write .fledgling-init.sql
 COPY (
     SELECT _fledgling_header(
@@ -231,14 +257,59 @@ COPY (
     ))
 ) TO '.mcp.json' (FORMAT csv, QUOTE '', HEADER false);
 
--- ── 8. Report ────────────────────────────────────────────────────────
+-- ── 8. Optional CLI install ───────────────────────────────────────────
+
+-- Fetch and install fledgling-cli to ~/.local/bin/fledgling if requested.
+-- COPY TO requires a literal path, so we use query() to conditionally
+-- write the script. The CLI is a bash wrapper that translates shell
+-- commands to DuckDB SQL using .fledgling-init.sql.
+SET VARIABLE _cli_path = getenv('HOME') || '/.local/bin/fledgling';
+SET VARIABLE _cli_installed = false;
+
+CREATE TABLE _cli_script AS SELECT * FROM read_text([]::VARCHAR[]) WHERE false;
+INSERT INTO _cli_script
+SELECT * FROM query(
+    CASE WHEN getvariable('_install_cli')
+    THEN 'SELECT * FROM read_text(''' || getvariable('_base') || '/bin/fledgling-cli'')'
+    ELSE 'SELECT * FROM read_text([]::VARCHAR[]) WHERE false'
+    END
+);
+
+-- Write CLI to project directory first, then report how to install globally.
+-- We can't use COPY TO with a variable path, and ~/.local/bin may not exist.
+COPY (
+    SELECT content FROM _cli_script WHERE content IS NOT NULL
+    UNION ALL SELECT NULL WHERE NOT EXISTS (SELECT 1 FROM _cli_script WHERE content IS NOT NULL)
+) TO '.fledgling-cli' (FORMAT csv, QUOTE '', HEADER false);
+SET VARIABLE _cli_installed = (SELECT count(*) > 0 FROM _cli_script WHERE content IS NOT NULL);
+
+-- ── 9. Report ────────────────────────────────────────────────────────
 
 .output
-SELECT printf('Fledgling %s installed successfully!', getvariable('_version')) AS status;
-SELECT printf('  Profile:    %s', getvariable('_profile')) AS info;
-SELECT printf('  Modules:    %s', array_to_string(getvariable('_all_modules'), ', ')) AS info;
-SELECT printf('  Extensions: %s', array_to_string(getvariable('_extensions'), ', ')) AS info;
-SELECT '  Files written:' AS info;
-SELECT '    .fledgling-init.sql' AS info;
-SELECT '    .fledgling-help.md' AS info;
-SELECT '    .mcp.json' AS info;
+.mode list
+.separator ""
+.headers off
+SELECT unnest([line for line in [
+    '',
+    printf('Fledgling %s installed successfully!', getvariable('_version')),
+    '',
+    printf('  Profile:    %s', getvariable('_profile')),
+    printf('  Modules:    %s', array_to_string(getvariable('_all_modules'), ', ')),
+    printf('  Extensions: %s', array_to_string(getvariable('_extensions'), ', ')),
+    '',
+    '  Files written:',
+    '    .fledgling-init.sql  — DuckDB init script',
+    '    .fledgling-help.md   — skill guide',
+    '    .mcp.json            — MCP server config',
+    CASE WHEN getvariable('_cli_installed') THEN '    .fledgling-cli       — CLI wrapper' ELSE NULL END,
+    '',
+    CASE WHEN getvariable('_cli_installed') THEN '  To install the CLI globally:' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '    chmod +x .fledgling-cli && mv .fledgling-cli ~/.local/bin/fledgling' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '  CLI examples:' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '    fledgling help                              # list commands' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '    fledgling find-definitions ''src/**/*.py''    # search code' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '    fledgling recent-changes 10 -c hash,message # git history' ELSE NULL END,
+    CASE WHEN getvariable('_cli_installed') THEN '    fledgling query "SELECT * FROM sessions()"  # raw SQL' ELSE NULL END,
+    ''
+] IF line IS NOT NULL]) AS info;
