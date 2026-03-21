@@ -6,6 +6,11 @@
 -- find_definitions: Find function, class, or variable definitions.
 -- The core code search tool — replaces grep for "where is X defined?"
 --
+-- Default behavior (no name_pattern): returns only function, class, and module
+-- definitions at depth <= 2, filtering out inner variable assignments.
+-- When name_pattern is provided (not '%'): also includes variable definitions,
+-- allowing targeted search for specific named variables.
+--
 -- Examples:
 --   SELECT * FROM find_definitions('**/*.py');
 --   SELECT * FROM find_definitions('src/**/*.py', 'parse%');
@@ -18,9 +23,20 @@ CREATE OR REPLACE MACRO find_definitions(file_pattern, name_pattern := '%') AS T
         end_line,
         peek AS signature
     FROM read_ast(file_pattern)
-    WHERE is_definition(semantic_type)
-      AND name != ''
+    WHERE name != ''
       AND name LIKE name_pattern
+      AND (
+          -- When name_pattern is '%' (default): only structural definitions at top level
+          (name_pattern = '%'
+              AND (is_function_definition(semantic_type)
+                   OR is_class_definition(semantic_type)
+                   OR is_module_definition(semantic_type))
+              AND depth <= 2)
+          OR
+          -- When name_pattern is provided: include variable definitions too
+          (name_pattern != '%'
+              AND is_definition(semantic_type))
+      )
     ORDER BY file_path, start_line;
 
 -- find_calls: Find function/method call sites.
@@ -55,25 +71,48 @@ CREATE OR REPLACE MACRO find_imports(file_pattern) AS TABLE
     WHERE is_import(semantic_type)
     ORDER BY file_path, start_line;
 
--- code_structure: Get a structural overview of files.
--- Shows the top-level definitions in a file/directory.
+-- code_structure: Get a structural overview of files with complexity metrics.
+-- Shows top-level definitions with size and complexity indicators for triage.
+-- Use this to answer "which functions are large or complex?" before reading code.
+-- Use find_definitions for navigation ("where is X defined?").
 --
 -- Examples:
 --   SELECT * FROM code_structure('src/main.py');
 --   SELECT * FROM code_structure('src/**/*.py');
 CREATE OR REPLACE MACRO code_structure(file_pattern) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(file_pattern)
+    ),
+    defs AS (
+        SELECT
+            file_path,
+            name,
+            semantic_type,
+            start_line,
+            end_line,
+            descendant_count,
+            children_count
+        FROM ast
+        WHERE is_definition(semantic_type)
+          AND name != ''
+          AND depth <= 2
+    ),
+    metrics AS (
+        SELECT * FROM ast_function_metrics(ast)
+    )
     SELECT
-        file_path,
-        name,
-        semantic_type_to_string(semantic_type) AS kind,
-        start_line,
-        end_line,
-        end_line - start_line + 1 AS line_count
-    FROM read_ast(file_pattern)
-    WHERE is_definition(semantic_type)
-      AND name != ''
-      AND depth <= 2
-    ORDER BY file_path, start_line;
+        d.file_path,
+        d.name,
+        semantic_type_to_string(d.semantic_type) AS kind,
+        d.start_line,
+        d.end_line,
+        d.end_line - d.start_line + 1 AS line_count,
+        d.descendant_count,
+        d.children_count,
+        m.cyclomatic AS cyclomatic_complexity
+    FROM defs d
+    LEFT JOIN metrics m ON d.file_path = m.file_path AND d.name = m.name
+    ORDER BY d.file_path, d.start_line;
 
 -- complexity_hotspots: Find the most complex functions in a codebase.
 -- Returns functions ranked by cyclomatic complexity with structural metrics.

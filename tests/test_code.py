@@ -98,12 +98,16 @@ class TestCodeStructure:
         ).fetchall()
         assert len(rows) > 0
 
-    def test_includes_line_count(self, code_macros):
+    def test_columns(self, code_macros):
         desc = code_macros.execute(
             "DESCRIBE SELECT * FROM code_structure(?)", [CONFTEST_PATH]
         ).fetchall()
         col_names = [r[0] for r in desc]
-        assert "line_count" in col_names
+        assert col_names == [
+            "file_path", "name", "kind", "start_line", "end_line",
+            "line_count", "descendant_count", "children_count",
+            "cyclomatic_complexity",
+        ]
 
     def test_line_count_positive(self, code_macros):
         rows = code_macros.execute(
@@ -111,6 +115,41 @@ class TestCodeStructure:
         ).fetchall()
         for row in rows:
             assert row[0] >= 1
+
+    def test_structural_metrics_present(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT descendant_count, children_count FROM code_structure(?)",
+            [CONFTEST_PATH],
+        ).fetchall()
+        assert len(rows) > 0
+        # descendant_count and children_count must be non-negative integers
+        for row in rows:
+            assert row[0] >= 0
+            assert row[1] >= 0
+
+    def test_cyclomatic_complexity_for_functions(self, code_macros):
+        rows = code_macros.execute(
+            """SELECT name, kind, cyclomatic_complexity
+               FROM code_structure(?)
+               WHERE kind = 'DEFINITION_FUNCTION'""",
+            [CONFTEST_PATH],
+        ).fetchall()
+        assert len(rows) > 0
+        # Functions should have non-NULL cyclomatic complexity >= 1
+        for row in rows:
+            assert row[2] is not None
+            assert row[2] >= 1
+
+    def test_cyclomatic_null_for_non_functions(self, code_macros):
+        rows = code_macros.execute(
+            """SELECT name, kind, cyclomatic_complexity
+               FROM code_structure(?)
+               WHERE kind NOT IN ('DEFINITION_FUNCTION', 'DEFINITION_METHOD')""",
+            [CONFTEST_PATH],
+        ).fetchall()
+        # Non-function definitions should have NULL cyclomatic complexity
+        for row in rows:
+            assert row[2] is None
 
 
 class TestComplexityHotspots:
