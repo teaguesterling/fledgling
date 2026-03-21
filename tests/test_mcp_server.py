@@ -142,6 +142,32 @@ class TestCodeStructure:
         assert md_row_count(text) > 0
 
 
+class TestFindInAST:
+    def test_finds_calls(self, mcp_server):
+        text = call_tool(mcp_server, "FindInAST", {
+            "file_pattern": CONFTEST_PATH,
+            "kind": "calls",
+        })
+        assert md_row_count(text) > 0
+
+    def test_finds_imports(self, mcp_server):
+        text = call_tool(mcp_server, "FindInAST", {
+            "file_pattern": CONFTEST_PATH,
+            "kind": "imports",
+        })
+        assert md_row_count(text) > 0
+        assert "import" in text.lower() or "os" in text
+
+    def test_name_filter(self, mcp_server):
+        text = call_tool(mcp_server, "FindInAST", {
+            "file_pattern": CONFTEST_PATH,
+            "kind": "calls",
+            "name_pattern": "execute%",
+        })
+        assert md_row_count(text) > 0
+        assert "execute" in text
+
+
 # -- Code: Multi-language (sitting_duck test data) --
 
 _skip_no_data = pytest.mark.skipif(

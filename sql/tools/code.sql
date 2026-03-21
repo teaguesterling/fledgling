@@ -1,11 +1,14 @@
 -- Fledgling: Code Intelligence Tool Publications
 --
--- Publishes 2 MCP tools for AST-based code analysis.
+-- Publishes 3 MCP tools for AST-based code analysis.
 -- Macros are defined in sql/code.sql; this file only creates MCP bindings.
 --
 -- Embeds session_root at publish time (getvariable is not available
 -- in MCP tool execution context). Must be loaded after sandbox.sql
 -- and code.sql, with session_root already set.
+--
+-- Published tools:
+--   find_in_ast is published as FindInAST
 --
 -- Macros without tool publications (use via query tool):
 --   find_calls, find_imports, complexity_hotspots, function_callers,
@@ -31,5 +34,18 @@ SELECT mcp_publish_tool(
     )',
     '{"file_pattern": {"type": "string", "description": "Glob pattern for files to analyze (e.g. src/**/*.py)"}}',
     '["file_pattern"]',
+    'markdown'
+);
+
+SELECT mcp_publish_tool(
+    'FindInAST',
+    'Search code by semantic category: calls, imports, definitions, loops, conditionals, strings, comments. More targeted than grep — finds structural patterns, not text matches.',
+    'SELECT * FROM find_in_ast(
+        _resolve($file_pattern),
+        $kind,
+        COALESCE(NULLIF($name_pattern, ''null''), ''%'')
+    )',
+    '{"file_pattern": {"type": "string", "description": "Glob pattern for files (e.g. src/**/*.py)"}, "kind": {"type": "string", "description": "What to find: calls, imports, definitions, loops, conditionals, strings, comments"}, "name_pattern": {"type": "string", "description": "SQL LIKE filter on name (e.g. connect%). Default: all"}}',
+    '["file_pattern", "kind"]',
     'markdown'
 );

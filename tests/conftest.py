@@ -148,6 +148,7 @@ V1_TOOLS = [
     "ReadLines",
     "FindDefinitions",
     "CodeStructure",
+    "FindInAST",
     "MDSection",
     "GitDiffSummary",
     "GitDiffFile",

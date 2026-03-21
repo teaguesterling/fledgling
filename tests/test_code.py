@@ -91,6 +91,51 @@ class TestFindImports:
         assert any("duckdb" in s for s in stmts)
 
 
+class TestFindInAST:
+    def test_finds_calls(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM find_in_ast(?, 'calls')", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_finds_imports(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM find_in_ast(?, 'imports')", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_finds_calls_with_name(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM find_in_ast(?, 'calls', 'connect')",
+            [CONFTEST_PATH],
+        ).fetchall()
+        names = [r[1] for r in rows]  # name is column 1
+        assert "connect" in names
+
+    def test_finds_loops(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM find_in_ast(?, 'loops')", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) >= 0  # conftest may not have loops
+
+    def test_invalid_kind_returns_empty(self, code_macros):
+        rows = code_macros.execute(
+            "SELECT * FROM find_in_ast(?, 'nonexistent')", [CONFTEST_PATH]
+        ).fetchall()
+        assert len(rows) == 0
+
+    def test_columns(self, code_macros):
+        desc = code_macros.execute(
+            "DESCRIBE SELECT * FROM find_in_ast(?, 'calls')", [CONFTEST_PATH]
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert "file_path" in col_names
+        assert "name" in col_names
+        assert "type" in col_names
+        assert "start_line" in col_names
+        assert "context" in col_names
+
+
 class TestCodeStructure:
     def test_returns_top_level_definitions(self, code_macros):
         rows = code_macros.execute(

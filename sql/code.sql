@@ -71,6 +71,45 @@ CREATE OR REPLACE MACRO find_imports(file_pattern) AS TABLE
     WHERE is_import(semantic_type)
     ORDER BY file_path, start_line;
 
+-- find_in_ast: Search AST by semantic category.
+-- Generalizes find_calls, find_imports, and other AST queries into a
+-- single parameterized search. The kind parameter maps to sitting_duck's
+-- semantic type predicates.
+--
+-- Supported kinds:
+--   'calls'       — function/method call sites (is_call)
+--   'imports'     — import/include statements (is_import)
+--   'definitions' — all definitions (is_definition)
+--   'loops'       — loop constructs (is_loop)
+--   'conditionals'— if/switch/ternary (is_conditional)
+--   'strings'     — string literals (is_string_literal)
+--   'comments'    — comments and docstrings (is_comment)
+--
+-- Examples:
+--   SELECT * FROM find_in_ast('src/**/*.py', 'calls');
+--   SELECT * FROM find_in_ast('src/**/*.py', 'calls', 'connect%');
+--   SELECT * FROM find_in_ast('src/**/*.py', 'imports');
+CREATE OR REPLACE MACRO find_in_ast(file_pattern, kind, name_pattern := '%') AS TABLE
+    SELECT
+        file_path,
+        name,
+        semantic_type_to_string(semantic_type) AS type,
+        start_line,
+        peek AS context
+    FROM read_ast(file_pattern)
+    WHERE name LIKE name_pattern
+      AND CASE kind
+          WHEN 'calls' THEN is_call(semantic_type)
+          WHEN 'imports' THEN is_import(semantic_type)
+          WHEN 'definitions' THEN is_definition(semantic_type)
+          WHEN 'loops' THEN is_loop(semantic_type)
+          WHEN 'conditionals' THEN is_conditional(semantic_type)
+          WHEN 'strings' THEN is_string_literal(semantic_type)
+          WHEN 'comments' THEN is_comment(semantic_type)
+          ELSE false
+      END
+    ORDER BY file_path, start_line;
+
 -- code_structure: Get a structural overview of files with complexity metrics.
 -- Shows top-level definitions with size and complexity indicators for triage.
 -- Use this to answer "which functions are large or complex?" before reading code.
