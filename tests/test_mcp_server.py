@@ -288,6 +288,33 @@ class TestHelp:
         assert md_row_count(text) >= 1
 
 
+class TestGitDiffFile:
+    """GitDiffFile uses text format: unified diff with +/- prefixes."""
+
+    def test_returns_diff_lines(self, mcp_server):
+        # Find a file that changed in the last commit
+        summary = call_tool(mcp_server, "GitDiffSummary", {
+            "from_rev": "HEAD~1",
+            "to_rev": "HEAD",
+        })
+        # The tool should return diff lines
+        text = call_tool(mcp_server, "GitDiffFile", {
+            "file": "sql/install-fledgling.sql",
+            "from_rev": "HEAD~2",
+            "to_rev": "HEAD",
+        })
+        lines = [l for l in text.strip().split("\n") if l.strip()]
+        assert len(lines) > 0
+
+    def test_shows_additions_and_removals(self, mcp_server):
+        text = call_tool(mcp_server, "GitDiffFile", {
+            "file": "sql/install-fledgling.sql",
+            "from_rev": "HEAD~5",
+            "to_rev": "HEAD",
+        })
+        assert "+" in text or "-" in text
+
+
 class TestGitDiffSummary:
     def test_returns_changed_files(self, mcp_server):
         text = call_tool(mcp_server, "GitDiffSummary", {

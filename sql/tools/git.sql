@@ -9,7 +9,7 @@
 --
 -- Macros without tool publications (use via query tool):
 --   recent_changes, branch_list, tag_list, working_tree_status,
---   file_diff, structural_diff, changed_function_summary
+--   structural_diff, changed_function_summary
 
 SELECT mcp_publish_tool(
     'GitDiffSummary',
@@ -35,4 +35,21 @@ SELECT mcp_publish_tool(
     '{"file": {"type": "string", "description": "Repository-relative file path (e.g. README.md, sql/repo.sql)"}, "rev": {"type": "string", "description": "Git revision (e.g. HEAD, HEAD~1, main, v1.0, commit hash)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
     '["file", "rev"]',
     'json'
+);
+
+SELECT mcp_publish_tool(
+    'GitDiffFile',
+    'Line-level unified diff of a single file between two revisions. Shows added (+), removed (-), and context lines. Use GitDiffSummary first to find changed files.',
+    'SELECT printf(''%s %s'',
+        CASE line_type WHEN ''ADDED'' THEN ''+'' WHEN ''REMOVED'' THEN ''-'' ELSE '' '' END,
+        content) AS line
+     FROM file_diff(
+        $file,
+        $from_rev,
+        $to_rev,
+        COALESCE(_resolve(NULLIF($path, ''null'')), ''.'')
+    )',
+    '{"file": {"type": "string", "description": "File path (repo-relative)"}, "from_rev": {"type": "string", "description": "Base revision (e.g. HEAD~1, main)"}, "to_rev": {"type": "string", "description": "Target revision (e.g. HEAD)"}, "path": {"type": "string", "description": "Repository path (default: project root)"}}',
+    '["file", "from_rev", "to_rev"]',
+    'text'
 );

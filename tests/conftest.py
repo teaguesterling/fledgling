@@ -150,6 +150,7 @@ V1_TOOLS = [
     "CodeStructure",
     "MDSection",
     "GitDiffSummary",
+    "GitDiffFile",
     "GitShow",
     "Help",
     "ChatSessions",
