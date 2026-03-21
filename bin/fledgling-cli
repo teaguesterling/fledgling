@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+#
+# fledgling-cli — human-friendly CLI for fledgling macros
+#
+# Usage:
+#   fledgling <command> [args...] [--named=value...] [-f format] [-c cols]
+#
+# Examples:
+#   fledgling list-files 'src/**/*.py'
+#   fledgling find-definitions 'src/**/*.py' '%parse%'
+#   fledgling recent-changes 20
+#   fledgling file-diff src/main.py HEAD~3 HEAD
+#   fledgling code-structure '**/*.rs' -f csv
+#   fledgling recent-changes 10 -c hash,message
+#   fledgling query "SELECT * FROM sessions() LIMIT 5"
+#   fledgling help
+#   fledgling info
+#
+# Flags:
+#   -f FORMAT   Output format: markdown (default), csv, json, table, line
+#   -c COLUMNS  Comma-separated column selection
+#
+# Translates CLI conventions to DuckDB SQL:
+#   subcommand     → snake_case macro name
+#   positional args → quoted SQL arguments
+#   --key=value    → named parameter (key := 'value')
+#   --key value    → named parameter (key := 'value')
+#   numeric args   → unquoted (integers)
+
+set -euo pipefail
+
+INIT="${FLEDGLING_INIT:-.fledgling-init.sql}"
+FORMAT="markdown"
+COLUMNS=""
+
+# ── Parse global flags ────────────────────────────────────────────────
+
+rest=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f)     FORMAT="$2"; shift 2 ;;
+        -f*)    FORMAT="${1#-f}"; shift ;;
+        -c)     COLUMNS="$2"; shift 2 ;;
+        -c*)    COLUMNS="${1#-c}"; shift ;;
+        *)      rest+=("$1"); shift ;;
+    esac
+done
+set -- "${rest[@]+"${rest[@]}"}"
+
+if [[ $# -eq 0 ]]; then
+    set -- "help"
+fi
+
+cmd="$1"; shift
+
+# ── Helpers ───────────────────────────────────────────────────────────
+
+run_sql() {
+    local sql="$1"
+    if [[ -n "$COLUMNS" ]]; then
+        sql="SELECT ${COLUMNS} FROM (${sql})"
+    fi
+    exec duckdb -cmd ".read ${INIT}" \
+        -c ".mode ${FORMAT}" \
+        -c "${sql}" 2>/dev/null
+}
+
+# ── Special commands ──────────────────────────────────────────────────
+
+case "$cmd" in
+    help|--help|-h)
+        if [[ $# -eq 0 ]]; then
+            run_sql "SELECT function_name AS command,
+                           replace(function_name, '_', '-') AS cli,
+                           parameters AS args
+                    FROM duckdb_functions()
+                    WHERE function_type = 'table_macro'
+                      AND schema_name = 'main'
+                      AND function_name NOT LIKE '\_%' ESCAPE '\\'
+                      AND function_name NOT IN ('query')
+                    ORDER BY function_name"
+        else
+            run_sql "SELECT * FROM help('$1')"
+        fi
+        ;;
+    info)
+        run_sql "SELECT * FROM dr_fledgling()"
+        ;;
+    query|sql)
+        run_sql "$1"
+        ;;
+    version|--version|-V)
+        run_sql "SELECT getvariable('fledgling_version') AS version"
+        ;;
+esac
+
+# ── Build SQL from subcommand + args ──────────────────────────────────
+
+macro="${cmd//-/_}"
+
+positional=()
+named=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --*=*)
+            key="${1%%=*}"; key="${key#--}"; key="${key//-/_}"
+            val="${1#*=}"
+            if [[ "$val" =~ ^[0-9]+$ ]]; then
+                named+=("${key} := ${val}")
+            else
+                named+=("${key} := '${val}'")
+            fi
+            shift
+            ;;
+        --*)
+            key="${1#--}"; key="${key//-/_}"
+            shift
+            val="${1:-}"
+            if [[ "$val" =~ ^[0-9]+$ ]]; then
+                named+=("${key} := ${val}")
+            else
+                named+=("${key} := '${val}'")
+            fi
+            shift
+            ;;
+        *)
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                positional+=("$1")
+            else
+                positional+=("'$1'")
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Join args
+all_args=""
+if [[ ${#positional[@]} -gt 0 ]]; then
+    all_args=$(IFS=", "; echo "${positional[*]}")
+fi
+if [[ ${#named[@]} -gt 0 ]]; then
+    named_str=$(IFS=", "; echo "${named[*]}")
+    if [[ -n "$all_args" ]]; then
+        all_args="${all_args}, ${named_str}"
+    else
+        all_args="${named_str}"
+    fi
+fi
+
+run_sql "SELECT * FROM ${macro}(${all_args})"
