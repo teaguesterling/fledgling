@@ -28,7 +28,7 @@ These macros are available via the **query** tool. They provide the full power o
 |-------|---------|---------|
 | `list_files(pattern)` | Find files by glob | `SELECT * FROM list_files('src/**/*.py')` |
 | `project_overview(root)` | File counts by language | `SELECT * FROM project_overview('.')` |
-| `read_as_table(path, limit)` | Preview CSV/JSON as table | `SELECT * FROM read_as_table('data.csv')` |
+| `read_as_table(path, limit)` | Preview CSV/JSON/Parquet as table | `SELECT * FROM read_as_table('data.csv')` |
 | `find_calls(pattern, name)` | Find function call sites | `SELECT * FROM find_calls('src/**/*.py', 'connect')` |
 | `find_imports(pattern)` | Find import statements | `SELECT * FROM find_imports('src/**/*.py')` |
 | `complexity_hotspots(pattern, n)` | Functions ranked by cyclomatic complexity | `SELECT * FROM complexity_hotspots('src/**/*.py', 10)` |
@@ -208,6 +208,7 @@ All macros are available via the **query** tool.
 | `find_definitions` | `(file_pattern, name_pattern := '%')` |
 | `find_calls` | `(file_pattern, name_pattern := '%')` |
 | `find_imports` | `(file_pattern)` |
+| `find_in_ast` | `(file_pattern, kind, name_pattern := '%')` |
 | `code_structure` | `(file_pattern)` |
 | `complexity_hotspots` | `(file_pattern, n := 20)` |
 | `function_callers` | `(file_pattern, func_name)` |
@@ -294,9 +295,22 @@ describe(query="SELECT * FROM complexity_hotspots('test', 1)")
 
 This reveals column names and types, making it easier to compose macros via joins.
 
+### Data File Formats
+
+`read_as_table(path)` auto-detects format by extension:
+
+| Extension | Reader | Built-in? |
+|-----------|--------|-----------|
+| `.csv`, `.tsv` | `read_csv_auto` | Yes |
+| `.json`, `.jsonl` | `read_json_auto` | Yes |
+| `.parquet`, `.pq` | `read_parquet` | Yes |
+
+Unsupported extensions fall back to CSV. For other formats, use the query tool with DuckDB's native readers directly (e.g., `SELECT * FROM 'data.xlsx'` if the spatial extension is installed).
+
 ### Token Efficiency
 
 - Use `CodeStructure` first to understand what's in a file before reading it
 - Use `FindDefinitions` with `name_pattern` to narrow results
+- Use `FindInAST` with `kind` for targeted semantic searches (calls, imports, loops, etc.)
 - Use `ReadLines` with `lines` and `match` to read only what you need
 - Use `doc_outline()` via query before `MDSection` to find the right section

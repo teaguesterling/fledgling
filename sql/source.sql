@@ -148,18 +148,31 @@ CREATE OR REPLACE MACRO project_overview(root := '.') AS TABLE
     GROUP BY ALL
     ORDER BY file_count DESC;
 
--- read_as_table: Preview structured data files (CSV, JSON) as tables.
--- Uses query() for dynamic dispatch between read_csv_auto and read_json_auto
--- based on file extension. Avoids query_table() which conflicts with Python's
--- json module in DuckDB's replacement scan.
+-- read_as_table: Preview structured data files as tables.
+-- Auto-detects format from extension: CSV, TSV, JSON, JSONL, Parquet.
+-- Uses query() for dynamic dispatch. Avoids query_table() which conflicts
+-- with Python's json module in DuckDB's replacement scan.
+--
+-- Supported formats (built-in):
+--   .csv, .tsv      — read_csv_auto
+--   .json, .jsonl   — read_json_auto
+--   .parquet, .pq    — read_parquet
+--
+-- Additional formats require DuckDB extensions:
+--   .xlsx            — INSTALL spatial (includes Excel reader)
+--   .toml            — INSTALL toml  (community extension, if available)
+--   Unsupported extensions fall back to read_csv_auto.
 --
 -- Examples:
 --   SELECT * FROM read_as_table('data.csv');
---   SELECT * FROM read_as_table('data.json', 10);
+--   SELECT * FROM read_as_table('results.json', 10);
+--   SELECT * FROM read_as_table('output.parquet');
 CREATE OR REPLACE MACRO read_as_table(file_path, lim := 100) AS TABLE
     SELECT * FROM query(
         CASE WHEN file_path LIKE '%.json' OR file_path LIKE '%.jsonl'
              THEN 'SELECT * FROM read_json_auto(''' || replace(file_path, '''', '''''') || ''') LIMIT ' || CAST(lim AS VARCHAR)
+             WHEN file_path LIKE '%.parquet' OR file_path LIKE '%.pq'
+             THEN 'SELECT * FROM read_parquet(''' || replace(file_path, '''', '''''') || ''') LIMIT ' || CAST(lim AS VARCHAR)
              ELSE 'SELECT * FROM read_csv_auto(''' || replace(file_path, '''', '''''') || ''') LIMIT ' || CAST(lim AS VARCHAR)
         END
     );
