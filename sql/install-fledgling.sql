@@ -196,7 +196,7 @@ CREATE OR REPLACE MACRO _fledgling_footer(root, profile) AS
     END
     || E'\n'
     || E'.output\n'
-    || 'SELECT CASE WHEN COALESCE(getvariable(''transport''), ''stdio'') <> ''none'' THEN mcp_server_start(COALESCE(getvariable(''transport''), ''stdio''), getvariable(''mcp_server_options'')) END;' || E'\n';
+    || 'SELECT mcp_server_start(COALESCE(getvariable(''transport''), ''stdio''), getvariable(''mcp_server_options'')) WHERE COALESCE(getvariable(''transport''), ''stdio'') <> ''none'';' || E'\n';
 
 -- ── 7. Write output files ────────────────────────────────────────────
 

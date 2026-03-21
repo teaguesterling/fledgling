@@ -166,7 +166,7 @@ run_sql() {
         -cmd "SET VARIABLE transport = 'none'" \
         -cmd ".read ${INIT}" \
         -c ".mode ${FORMAT}" \
-        -c "${sql}" 2>/dev/null
+        -c "${sql}"
 }
 
 # ── Special commands ──────────────────────────────────────────────────
