@@ -383,6 +383,76 @@ class TestNamedParams:
         assert rc == 0
 
 
+# ── PascalCase (MCP tool name) aliases ────────────────────────────────
+
+
+class TestPascalCase:
+    def test_pascal_case_command(self, cli_init):
+        rc, out, _ = run_cli("RecentChanges", "3", init_path=cli_init)
+        assert rc == 0
+        assert "hash" in out.lower()
+
+    def test_pascal_code_structure(self, cli_init):
+        rc, out, _ = run_cli("CodeStructure", "tests/conftest.py", init_path=cli_init)
+        assert rc == 0
+        assert "conftest" in out
+
+    def test_pascal_find_definitions(self, cli_init):
+        rc, out, _ = run_cli("FindDefinitions", "tests/conftest.py", init_path=cli_init)
+        assert rc == 0
+
+
+# ── Completions ───────────────────────────────────────────────────────
+
+
+class TestCompletions:
+    def test_bash_completions(self, cli_init):
+        env = os.environ.copy()
+        env["FLEDGLING_INIT"] = cli_init
+        result = subprocess.run(
+            [CLI, "--completions", "bash"],
+            capture_output=True, text=True, timeout=5, env=env,
+        )
+        assert result.returncode == 0
+        assert "complete" in result.stdout
+        assert "_fledgling" in result.stdout
+
+    def test_zsh_completions(self, cli_init):
+        env = os.environ.copy()
+        env["FLEDGLING_INIT"] = cli_init
+        result = subprocess.run(
+            [CLI, "--completions", "zsh"],
+            capture_output=True, text=True, timeout=5, env=env,
+        )
+        assert result.returncode == 0
+        assert "compdef" in result.stdout
+
+
+# ── Init resolution ───────────────────────────────────────────────────
+
+
+class TestInitResolution:
+    def test_missing_init_errors(self):
+        """No init file → helpful error message."""
+        if not _has_duckdb():
+            pytest.skip("duckdb CLI not in PATH")
+        env = os.environ.copy()
+        env.pop("FLEDGLING_INIT", None)
+        result = subprocess.run(
+            [CLI, "info"],
+            capture_output=True, text=True, timeout=5,
+            cwd="/tmp", env=env,
+        )
+        assert result.returncode == 1
+        assert "no fledgling init file found" in result.stderr.lower()
+
+    def test_env_var_override(self, cli_init):
+        """FLEDGLING_INIT takes precedence."""
+        rc, out, _ = run_cli("info", init_path=cli_init)
+        assert rc == 0
+        assert "0.2.0" in out
+
+
 # ── Error handling ────────────────────────────────────────────────────
 
 
