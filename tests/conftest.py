@@ -303,6 +303,11 @@ def json_row_count(text):
     return text.count('{"' + first_key + '":"')
 
 
+def text_line_count(text):
+    """Count non-empty lines in a text-format tool result."""
+    return len([l for l in text.strip().split("\n") if l.strip()])
+
+
 # -- MCP server fixtures --
 
 
