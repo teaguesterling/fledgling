@@ -296,6 +296,8 @@
         <div class="card"><strong>ChatToolUsage</strong><span>Tool usage frequency analysis</span></div>
         <div class="card"><strong>ChatDetail</strong><span>Deep view of a single session</span></div>
         <div class="card"><strong>Help</strong><span>Built-in skill guide for the agent</span></div>
+        <div class="card"><strong>FindInAST</strong><span>Search code by semantic category (calls, imports, loops, etc.)</span></div>
+        <div class="card"><strong>GitDiffFile</strong><span>Line-level unified diff between revisions</span></div>
     </div>
 
     <h2>SQL Macros</h2>
@@ -315,6 +317,7 @@
     <h3 class="ref-heading"><a href="https://github.com/teaguesterling/fledgling/blob/main/docs/macros/code.md">Code</a></h3>
     <table class="ref">
         <tr><td><code>find_definitions(pattern, name)</code></td><td>AST search for functions, classes, variables</td></tr>
+        <tr><td><code>find_in_ast(pattern, kind, name)</code></td><td>Semantic AST search by category (calls, imports, loops, conditionals, strings, comments)</td></tr>
         <tr><td><code>find_calls(pattern, name)</code></td><td>Find function call sites</td></tr>
         <tr><td><code>find_imports(pattern)</code></td><td>Find import statements</td></tr>
         <tr><td><code>code_structure(pattern)</code></td><td>Top-level definitions per file</td></tr>

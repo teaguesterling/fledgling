@@ -121,6 +121,8 @@ These are hard-won lessons. Don't remove workarounds without verifying the upstr
 
 10. **C++ table functions reject column refs and subqueries in macros** — `text_diff_lines(r.col)` fails with "does not support lateral join column parameters". Subqueries in macro arguments also rejected (e.g., a macro containing `(SELECT val FROM table)` cannot be passed to `list_files()`). Workaround: for column refs, reimplement in pure SQL; for path resolution, use literal-backed macros (`_resolve`, `_session_root`) created externally with the value baked in.
 
+16. **DuckDB 1.5.0 `-cmd`/`-init` scope** — Variables and macros created via `-cmd` are not visible in `-init` files. `-init` runs "upon startup" before `-cmd` is processed. Workaround: use `-cmd ".read file.sql"` instead of `-init file.sql`. Filed as duckdb/duckdb#21535.
+
 ## Tests
 
 ### Running tests
@@ -169,6 +171,11 @@ mcp__blq_mcp__output(run_id=N, tail=30)                   # view output
 ```
 bin/
   fledgling                 Bash launcher (serve, info subcommands)
+  fledgling-cli             CLI entry point
+skills/
+  explore-codebase.md       Fledgling exploration workflow
+  investigate-issue.md      Debugging workflow with fledgling tools
+  review-changes.md         PR/commit review workflow
 init/
   init-fledgling.sql        Default entry point (alias for analyst)
   init-fledgling-analyst.sql  Analyst profile entry point (query enabled)
@@ -177,6 +184,7 @@ init/
 sql/
   <tier>.sql                Macro definitions (one file per tier)
   sandbox.sql               resolve() macro + sandbox setup
+  install-fledgling.sql     Install script for standalone deployment
   tools/<tier>.sql          Tool publications (one file per tier)
   profiles/core.sql         Core profile: memory_limit + mcp_server_options
   profiles/analyst.sql      Analyst profile: memory_limit + mcp_server_options
@@ -233,13 +241,15 @@ Per-profile entry point (e.g. init/init-fledgling-analyst.sql):
 
 15. **getvariable() returns NULL in MCP tool templates** — Tool SQL templates execute in a context where `getvariable()` returns NULL. DuckDB macros are text-substituted (lazy), so a macro calling `getvariable()` also fails when invoked from a tool template. Fix: `_resolve()` and `_session_root()` macros with the session root baked in as a literal string, created by `bin/fledgling` via `-cmd` and `conftest.py` via `create_resolve_macros()`.
 
+16. **duckdb_mcp text format** — The `'text'` output format is available in duckdb_mcp >= 517383c. Returns plain text lines (one per row, first column only). Used by ReadLines and GitDiffFile for clean line-oriented output.
+
 ## Tool Output Format Strategy
 
 Three output formats, chosen by what the tool returns:
 
 - **`'markdown'`** — Tabular tools with short, structured values: ListFiles, ProjectOverview, ReadAsTable, FindDefinitions, FindCalls, FindImports, CodeStructure, MDOutline, GitChanges, GitBranches, GitDiffSummary, GitTags, GitStatus, ChatSessions, ChatSearch, ChatToolUsage, ChatDetail, Help.
 - **`'json'`** — Tools returning metadata alongside large content blobs: GitShow (1 row, entire file), MDSection (section metadata + full markdown text).
-- **`'text'`** (pending duckdb_mcp#55) — Line-oriented content tools where the agent is reading, not parsing structure: ReadLines, GitDiffFile. Tool SQL controls formatting via `printf()`. Currently using `'json'` as interim format until `'text'` is available upstream.
+- **`'text'`** — Line-oriented content tools where the agent is reading, not parsing structure: ReadLines, GitDiffFile. Tool SQL controls formatting via `printf()`. Available in duckdb_mcp >= 517383c (duckdb_mcp#55 resolved).
 
 <!-- blq:agent-instructions -->
 ## blq - Build Log Query
