@@ -21,7 +21,7 @@ CREATE OR REPLACE MACRO doc_outline(file_pattern, max_lvl := 3) AS TABLE
         end_line
     FROM read_markdown_sections(
         file_pattern,
-        include_content := false,
+        include_content := true,
         max_level := max_lvl,
         include_filepath := true
     )
