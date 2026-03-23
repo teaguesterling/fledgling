@@ -150,26 +150,40 @@ CREATE OR REPLACE MACRO project_overview(root := '.') AS TABLE
 
 -- read_as_table: Preview structured data files as tables.
 -- Auto-detects format from extension: CSV, TSV, JSON, JSONL, Parquet.
+-- Rejects source code files (detected via sitting_duck's supported languages
+-- mapped to common file extensions). Use ReadLines or read_source instead.
 -- Uses query() for dynamic dispatch. Avoids query_table() which conflicts
 -- with Python's json module in DuckDB's replacement scan.
 --
 -- Supported formats (built-in):
 --   .csv, .tsv      — read_csv_auto
 --   .json, .jsonl   — read_json_auto
---   .parquet, .pq    — read_parquet
+--   .parquet, .pq   — read_parquet
 --
--- Additional formats require DuckDB extensions:
---   .xlsx            — INSTALL spatial (includes Excel reader)
---   .toml            — INSTALL toml  (community extension, if available)
---   Unsupported extensions fall back to read_csv_auto.
+-- Unknown extensions fall back to read_csv_auto.
 --
 -- Examples:
 --   SELECT * FROM read_as_table('data.csv');
 --   SELECT * FROM read_as_table('results.json', 10);
 --   SELECT * FROM read_as_table('output.parquet');
+CREATE OR REPLACE MACRO _is_code_file(file_path) AS
+    regexp_extract(file_path, '\.([^.]+)$', 1) IN (
+        'py', 'js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs',
+        'rs', 'go', 'java', 'c', 'cpp', 'cc', 'h', 'hpp', 'hh',
+        'rb', 'php', 'swift', 'kt', 'kts',
+        'sh', 'bash', 'zsh', 'fish',
+        'sql', 'r', 'cs', 'dart', 'zig', 'lua',
+        'toml', 'yaml', 'yml',
+        'html', 'css', 'scss', 'less',
+        'md', 'graphql', 'hcl', 'tf',
+        'makefile', 'cmake', 'dockerfile'
+    );
+
 CREATE OR REPLACE MACRO read_as_table(file_path, lim := 100) AS TABLE
     SELECT * FROM query(
-        CASE WHEN file_path LIKE '%.json' OR file_path LIKE '%.jsonl'
+        CASE WHEN _is_code_file(file_path)
+             THEN 'SELECT ''' || replace(file_path, '''', '''''') || ' is a source code file. Use ReadLines or read_source() instead.'' AS error'
+             WHEN file_path LIKE '%.json' OR file_path LIKE '%.jsonl'
              THEN 'SELECT * FROM read_json_auto(''' || replace(file_path, '''', '''''') || ''') LIMIT ' || CAST(lim AS VARCHAR)
              WHEN file_path LIKE '%.parquet' OR file_path LIKE '%.pq'
              THEN 'SELECT * FROM read_parquet(''' || replace(file_path, '''', '''''') || ''') LIMIT ' || CAST(lim AS VARCHAR)
