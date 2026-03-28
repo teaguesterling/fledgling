@@ -202,10 +202,11 @@ def create_server(
         sections.append(_format_markdown_table(commits.columns, commits.fetchall()))
 
         status = con.working_tree_status()
+        status_cols = status.columns
         status_rows = status.fetchall()
         sections.append("\n## Working Tree Status\n")
         if status_rows:
-            sections.append(_format_markdown_table(status.columns, status_rows))
+            sections.append(_format_markdown_table(status_cols, status_rows))
         else:
             sections.append("Clean working tree.")
 

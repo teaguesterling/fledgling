@@ -154,6 +154,15 @@ class TestGitResource:
         assert "Branches" in text or "branches" in text
         assert "Recent" in text or "Commits" in text or "commits" in text
 
+    def test_matches_direct_macros(self, mcp):
+        import fledgling
+        con = fledgling.connect(init=False)
+        branches = con.branch_list().fetchall()
+        text = _read_resource(mcp, "fledgling://git")
+        for row in branches:
+            branch_name = str(row[0])
+            assert branch_name in text, f"Branch '{branch_name}' not in resource"
+
     def test_multiple_reads_consistent(self, mcp):
         text1 = _read_resource(mcp, "fledgling://git")
         text2 = _read_resource(mcp, "fledgling://git")
