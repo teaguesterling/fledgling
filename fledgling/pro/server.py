@@ -27,6 +27,9 @@ from fastmcp import FastMCP
 
 import fledgling
 from fledgling.connection import Connection
+from fledgling.pro.defaults import (
+    ProjectDefaults, apply_defaults, infer_defaults, load_config,
+)
 
 
 # ── Tool descriptions for known macros ───────────────────────────────
@@ -144,6 +147,12 @@ def create_server(
     con = fledgling.connect(init=init, root=root, modules=modules, profile=profile)
     mcp = FastMCP(name)
 
+    # Infer smart defaults, merge with config file overrides
+    project_root = root or os.getcwd()
+    overrides = load_config(project_root)
+    defaults = infer_defaults(con, overrides=overrides)
+    mcp._defaults = defaults
+
     # Register each macro as an MCP tool
     for macro_info in con._tools.list():
         macro_name = macro_info["name"]
@@ -152,7 +161,7 @@ def create_server(
         if macro_name in _SKIP:
             continue
 
-        _register_tool(mcp, con, macro_name, params)
+        _register_tool(mcp, con, macro_name, params, defaults)
 
     return mcp
 
@@ -162,6 +171,7 @@ def _register_tool(
     con: Connection,
     macro_name: str,
     params: list[str],
+    defaults: ProjectDefaults,
 ):
     """Register a single macro as an MCP tool."""
     description = _DESCRIPTIONS.get(
@@ -173,7 +183,9 @@ def _register_tool(
     # Build the tool function dynamically
     # FastMCP uses the function signature for parameter schema
     async def tool_fn(**kwargs) -> str:
-        # Remove None values (optional params not provided)
+        # Apply smart defaults for None params
+        kwargs = apply_defaults(defaults, macro_name, kwargs)
+        # Remove remaining None values (optional params not provided)
         filtered = {k: v for k, v in kwargs.items() if v is not None}
         # Convert string numbers to int where needed
         for k, v in filtered.items():

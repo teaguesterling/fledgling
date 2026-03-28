@@ -207,3 +207,31 @@ class TestInferDefaults:
         d1 = infer_defaults(con)
         d2 = infer_defaults(con, overrides={})
         assert d1 == d2
+
+
+# ── Server integration tests ───────────────────────────────────────
+
+try:
+    from fledgling.pro.server import create_server
+    _has_fastmcp = True
+except ImportError:
+    _has_fastmcp = False
+
+
+@pytest.mark.skipif(not _has_fastmcp, reason="fastmcp not installed")
+class TestServerIntegration:
+    """Defaults are wired into the FastMCP server."""
+
+    @pytest.fixture
+    def server(self):
+        return create_server(root=str(PROJECT_ROOT))
+
+    def test_server_has_defaults(self, server):
+        """create_server stores ProjectDefaults on the server context."""
+        assert hasattr(server, "_defaults")
+        assert isinstance(server._defaults, ProjectDefaults)
+
+    def test_server_defaults_inferred(self, server):
+        """Defaults reflect this project (Python, docs/)."""
+        assert "py" in server._defaults.code_pattern
+        assert server._defaults.doc_pattern.startswith("docs/")
