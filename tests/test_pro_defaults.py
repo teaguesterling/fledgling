@@ -2,7 +2,7 @@
 
 from dataclasses import fields
 
-from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS, apply_defaults
+from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS, apply_defaults, load_config
 
 
 class TestProjectDefaults:
@@ -114,3 +114,54 @@ class TestApplyDefaults:
         kwargs = {"file_pattern": None}
         apply_defaults(self.defaults, "find_definitions", kwargs)
         assert kwargs["file_pattern"] is None
+
+
+class TestLoadConfig:
+    """load_config reads .fledgling-python/config.toml overrides."""
+
+    def test_missing_config_returns_empty(self, tmp_path):
+        result = load_config(tmp_path)
+        assert result == {}
+
+    def test_missing_directory_returns_empty(self, tmp_path):
+        result = load_config(tmp_path / "nonexistent")
+        assert result == {}
+
+    def test_reads_defaults_section(self, tmp_path):
+        config_dir = tmp_path / ".fledgling-python"
+        config_dir.mkdir()
+        (config_dir / "config.toml").write_text(
+            '[defaults]\ncode_pattern = "src/**/*.rs"\n'
+        )
+        result = load_config(tmp_path)
+        assert result == {"code_pattern": "src/**/*.rs"}
+
+    def test_all_keys(self, tmp_path):
+        config_dir = tmp_path / ".fledgling-python"
+        config_dir.mkdir()
+        (config_dir / "config.toml").write_text(
+            '[defaults]\n'
+            'code_pattern = "**/*.go"\n'
+            'doc_pattern = "wiki/**/*.md"\n'
+            'main_branch = "develop"\n'
+        )
+        result = load_config(tmp_path)
+        assert result == {
+            "code_pattern": "**/*.go",
+            "doc_pattern": "wiki/**/*.md",
+            "main_branch": "develop",
+        }
+
+    def test_empty_defaults_section(self, tmp_path):
+        config_dir = tmp_path / ".fledgling-python"
+        config_dir.mkdir()
+        (config_dir / "config.toml").write_text("[defaults]\n")
+        result = load_config(tmp_path)
+        assert result == {}
+
+    def test_no_defaults_section(self, tmp_path):
+        config_dir = tmp_path / ".fledgling-python"
+        config_dir.mkdir()
+        (config_dir / "config.toml").write_text('[other]\nfoo = "bar"\n')
+        result = load_config(tmp_path)
+        assert result == {}

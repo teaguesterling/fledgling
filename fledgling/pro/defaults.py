@@ -7,7 +7,9 @@ from the project at server startup. Users can override via
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -39,6 +41,20 @@ def apply_defaults(
         if param in result and result[param] is None:
             result[param] = getattr(defaults, field_name)
     return result
+
+
+def load_config(root: str | Path) -> dict[str, str]:
+    """Read defaults overrides from .fledgling-python/config.toml.
+
+    Returns the [defaults] section as a flat dict, or {} if the file
+    doesn't exist or has no [defaults] section.
+    """
+    config_path = Path(root) / ".fledgling-python" / "config.toml"
+    if not config_path.is_file():
+        return {}
+    with open(config_path, "rb") as f:
+        data = tomllib.load(f)
+    return dict(data.get("defaults", {}))
 
 
 # Tool name → {param_name: defaults_field_name}
