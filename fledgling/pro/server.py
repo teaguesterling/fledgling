@@ -161,8 +161,17 @@ def create_server(
                   name="project",
                   description="Project overview — languages, file counts, directory structure.")
     def project_resource() -> str:
+        sections = []
+
         overview = con.project_overview()
-        return _format_markdown_table(overview.columns, overview.fetchall())
+        sections.append("## Languages\n")
+        sections.append(_format_markdown_table(overview.columns, overview.fetchall()))
+
+        top_level = con.list_files("*")
+        sections.append("\n## Top-Level Files\n")
+        sections.append(_format_markdown_table(top_level.columns, top_level.fetchall()))
+
+        return "\n".join(sections)
 
     @mcp.resource("fledgling://diagnostics",
                   name="diagnostics",

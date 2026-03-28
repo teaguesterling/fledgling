@@ -75,6 +75,12 @@ class TestProjectResource:
         text = _read_resource(mcp, "fledgling://project")
         assert "Python" in text or "python" in text.lower()
 
+    def test_contains_top_level_files(self, mcp):
+        text = _read_resource(mcp, "fledgling://project")
+        # list_files('*') data should include top-level files
+        assert "Top-Level" in text
+        assert "pyproject.toml" in text or "README" in text
+
     def test_matches_direct_macro(self, mcp):
         """Resource content matches calling the macro directly."""
         import fledgling
@@ -153,3 +159,14 @@ class TestGitResource:
         text2 = _read_resource(mcp, "fledgling://git")
         assert len(text1) > 0
         assert len(text2) > 0
+
+
+class TestResourcesWorkWithoutToolCalls:
+    """Resources are accessible without any prior tool calls."""
+
+    def test_fresh_server_resources(self):
+        """A fresh server exposes resources without calling any tools first."""
+        fresh_mcp = create_server(init=False)
+        for uri in RESOURCE_URIS:
+            text = _read_resource(fresh_mcp, uri)
+            assert len(text) > 0, f"{uri} returned empty on fresh server"
