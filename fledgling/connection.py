@@ -213,22 +213,27 @@ def connect(
             extensions are already loaded (e.g., in tests).
 
     Returns:
-        A DuckDB connection with all fledgling macros available.
+        A Connection wrapping a DuckDB connection with all fledgling macros
+        available. Supports direct macro calls as methods::
+
+            con.find_definitions("**/*.py").show()
+            con.recent_changes(5).df()
+            con.sql("SELECT * FROM ...").fetchall()
     """
     root = root or os.getcwd()
-    con = duckdb.connect(":memory:")
+    raw = duckdb.connect(":memory:")
 
     # Mode 1: Explicit init file
     if init is not None and init is not False:
-        _execute_init_file(con, init, root)
-        return con
+        _execute_init_file(raw, init, root)
+        return Connection(raw)
 
     # Mode 2: Auto-discover init file in project root (unless init=False)
     if init is not False:
         init_path = Path(root) / ".fledgling-init.sql"
         if init_path.exists():
-            _execute_init_file(con, str(init_path), root)
-            return con
+            _execute_init_file(raw, str(init_path), root)
+            return Connection(raw)
 
     # Mode 3: Load from SQL sources
     sql_dir = _find_sql_dir()
@@ -239,7 +244,40 @@ def connect(
         )
 
     _load_from_sources(
-        con, sql_dir, root, profile,
+        raw, sql_dir, root, profile,
         modules if modules is not None else _DEFAULT_MODULES,
     )
-    return con
+    return Connection(raw)
+
+
+class Connection:
+    """Fledgling-enhanced DuckDB connection.
+
+    Wraps a DuckDB connection and adds macro methods as attributes.
+    All standard DuckDB connection methods (execute, sql, table_function,
+    etc.) are delegated to the underlying connection.
+
+    Macros are callable directly::
+
+        con.find_definitions("**/*.py").show()
+        con.recent_changes(5).limit(3).df()
+
+    The full Tools object is available at ``con._tools``.
+    """
+
+    def __init__(self, con: duckdb.DuckDBPyConnection):
+        from fledgling.tools import Tools
+        self._con = con
+        self._tools = Tools(con)
+
+    def __getattr__(self, name: str):
+        # First check macros
+        if not name.startswith("_") and hasattr(self._tools, '_macros') and name in self._tools._macros:
+            return getattr(self._tools, name)
+        # Then delegate to underlying DuckDB connection
+        return getattr(self._con, name)
+
+    def __dir__(self):
+        duckdb_attrs = set(dir(self._con))
+        macro_names = set(self._tools._macros) if hasattr(self._tools, '_macros') else set()
+        return sorted(duckdb_attrs | macro_names | {"_con", "_tools"})
