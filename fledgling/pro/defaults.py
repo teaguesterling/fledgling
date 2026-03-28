@@ -10,6 +10,10 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fledgling.connection import Connection
 
 
 @dataclass
@@ -69,3 +73,110 @@ TOOL_DEFAULTS: dict[str, dict[str, str]] = {
     "file_diff":                {"from_rev": "from_rev", "to_rev": "to_rev"},
     "structural_diff":          {"from_rev": "from_rev", "to_rev": "to_rev"},
 }
+
+
+# ── Language detection ──────────────────────────────────────────────
+
+# Language name (as returned by project_overview) → file extensions.
+# Hardcoded for now; will be replaced by sitting_duck's extension listing
+# when available.
+LANGUAGE_EXTENSIONS: dict[str, list[str]] = {
+    "Python": ["py", "pyi"],
+    "JavaScript": ["js", "jsx", "mjs"],
+    "TypeScript": ["ts", "tsx"],
+    "Rust": ["rs"],
+    "Go": ["go"],
+    "Java": ["java"],
+    "Ruby": ["rb"],
+    "C": ["c"],
+    "C++": ["cpp", "cc"],
+    "C/C++": ["h", "hpp"],
+    "SQL": ["sql"],
+    "Shell": ["sh", "bash", "zsh"],
+    "Kotlin": ["kt", "kts"],
+    "Swift": ["swift"],
+    "Dart": ["dart"],
+    "PHP": ["php"],
+    "Lua": ["lua"],
+    "Zig": ["zig"],
+    "R": ["r", "R"],
+    "C#": ["cs"],
+    "HCL": ["hcl", "tf"],
+}
+
+# Directories to check for docs, in priority order.
+_DOC_DIRS = ["docs", "documentation", "doc", "wiki"]
+
+
+def _code_glob(extensions: list[str]) -> str:
+    """Build a glob pattern from a list of extensions."""
+    if len(extensions) == 1:
+        return f"**/*.{extensions[0]}"
+    joined = ",".join(extensions)
+    return f"**/*.{{{joined}}}"
+
+
+def _find_doc_dir(con: Connection) -> str | None:
+    """Check for common doc directories using list_files."""
+    for d in _DOC_DIRS:
+        try:
+            rows = con.list_files(f"{d}/*").fetchall()
+            if rows:
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def infer_defaults(
+    con: Connection,
+    overrides: dict[str, str] | None = None,
+) -> ProjectDefaults:
+    """Analyze the project and build smart defaults.
+
+    Args:
+        con: A fledgling Connection to the project.
+        overrides: Values from config file that override inference.
+
+    Returns:
+        ProjectDefaults with inferred + overridden values.
+    """
+    overrides = overrides or {}
+
+    # ── Code pattern ────────────────────────────────────────────
+    code_pattern = "**/*"
+    languages: list[str] = []
+    try:
+        rows = con.project_overview().fetchall()
+        # rows are (language, extension, file_count) ordered by count DESC
+        if rows:
+            # Group by language, sum file counts
+            lang_counts: dict[str, int] = {}
+            for lang, _ext, count in rows:
+                lang_counts[lang] = lang_counts.get(lang, 0) + count
+            languages = sorted(lang_counts.keys())
+            # Find the top language that we have extension mappings for
+            ranked = sorted(lang_counts, key=lang_counts.get, reverse=True)  # type: ignore[arg-type]
+            for lang in ranked:
+                if lang in LANGUAGE_EXTENSIONS:
+                    code_pattern = _code_glob(LANGUAGE_EXTENSIONS[lang])
+                    break
+    except Exception:
+        pass
+
+    # ── Doc pattern ─────────────────────────────────────────────
+    doc_dir = _find_doc_dir(con)
+    doc_pattern = f"{doc_dir}/**/*.md" if doc_dir else "**/*.md"
+
+    # ── Build defaults, apply overrides ─────────────────────────
+    defaults = ProjectDefaults(
+        code_pattern=code_pattern,
+        doc_pattern=doc_pattern,
+        languages=languages,
+    )
+
+    for key, value in overrides.items():
+        if hasattr(defaults, key):
+            setattr(defaults, key, value)
+
+    return defaults

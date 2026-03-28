@@ -1,8 +1,11 @@
 """Tests for fledgling.pro.defaults — smart project-aware defaults."""
 
+import pytest
 from dataclasses import fields
 
-from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS, apply_defaults, load_config
+import fledgling
+from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS, apply_defaults, load_config, infer_defaults
+from conftest import PROJECT_ROOT
 
 
 class TestProjectDefaults:
@@ -165,3 +168,42 @@ class TestLoadConfig:
         (config_dir / "config.toml").write_text('[other]\nfoo = "bar"\n')
         result = load_config(tmp_path)
         assert result == {}
+
+
+class TestInferDefaults:
+    """infer_defaults queries the project and builds ProjectDefaults."""
+
+    @pytest.fixture
+    def con(self):
+        return fledgling.connect(root=str(PROJECT_ROOT))
+
+    def test_code_pattern_is_python(self, con):
+        """This repo is primarily Python, so code_pattern should be **/*.py."""
+        defaults = infer_defaults(con)
+        assert "py" in defaults.code_pattern
+
+    def test_languages_includes_python(self, con):
+        defaults = infer_defaults(con)
+        assert "Python" in defaults.languages
+
+    def test_doc_pattern_finds_docs_dir(self, con):
+        """This repo has a docs/ directory."""
+        defaults = infer_defaults(con)
+        assert defaults.doc_pattern.startswith("docs/")
+
+    def test_main_branch_is_string(self, con):
+        defaults = infer_defaults(con)
+        assert isinstance(defaults.main_branch, str)
+        assert len(defaults.main_branch) > 0
+
+    def test_config_overrides_inferred(self, con):
+        """load_config values override inferred values."""
+        overrides = {"code_pattern": "custom/**/*.rs", "main_branch": "develop"}
+        defaults = infer_defaults(con, overrides=overrides)
+        assert defaults.code_pattern == "custom/**/*.rs"
+        assert defaults.main_branch == "develop"
+
+    def test_empty_overrides_no_effect(self, con):
+        d1 = infer_defaults(con)
+        d2 = infer_defaults(con, overrides={})
+        assert d1 == d2
