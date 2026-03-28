@@ -1,5 +1,7 @@
 """Tests for fledgling.pro.defaults — smart project-aware defaults."""
 
+from dataclasses import fields
+
 from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS
 
 
@@ -24,6 +26,8 @@ class TestProjectDefaults:
         assert d.code_pattern == "**/*"
         assert d.doc_pattern == "**/*.md"
         assert d.main_branch == "main"
+        assert d.from_rev == "HEAD~1"
+        assert d.to_rev == "HEAD"
         assert d.languages == []
 
 
@@ -50,3 +54,12 @@ class TestToolDefaults:
             assert tool in TOOL_DEFAULTS
             assert TOOL_DEFAULTS[tool]["from_rev"] == "from_rev"
             assert TOOL_DEFAULTS[tool]["to_rev"] == "to_rev"
+
+    def test_all_field_names_are_valid(self):
+        """Every value in TOOL_DEFAULTS must name a real ProjectDefaults field."""
+        valid_fields = {f.name for f in fields(ProjectDefaults)}
+        for tool, mapping in TOOL_DEFAULTS.items():
+            for _param, field_name in mapping.items():
+                assert field_name in valid_fields, (
+                    f"{tool}: '{field_name}' is not a ProjectDefaults field"
+                )
