@@ -13,6 +13,7 @@
 #   fledgling code-structure '**/*.rs' -f csv
 #   fledgling recent-changes 10 -c hash,message
 #   fledgling query "SELECT * FROM sessions() LIMIT 5"
+#   fledgling update                          # update to latest version
 #   fledgling help
 #   fledgling info
 #
@@ -119,6 +120,72 @@ COMP
 
 if [[ -n "${_COMP_SHELL:-}" ]]; then
     _completions "$_COMP_SHELL"
+    exit 0
+fi
+
+# ── Handle update (before init resolution — update doesn't need a running init) ──
+
+if [[ "${rest[0]:-}" == "update" ]]; then
+    INSTALL_URL="https://teaguesterling.github.io/fledgling/install.sql"
+
+    # Find existing init to extract config
+    _current_init=""
+    if [[ -f .fledgling-init.sql ]]; then
+        _current_init=".fledgling-init.sql"
+    elif [[ -f "${HOME}/.fledgling/init.sql" ]]; then
+        _current_init="${HOME}/.fledgling/init.sql"
+    fi
+
+    _config_parts=()
+    if [[ -n "$_current_init" ]]; then
+        # Extract modules from SET VARIABLE line (not from macro bodies)
+        _modules=$(grep "^SET VARIABLE fledgling_modules" "$_current_init" \
+            | head -1 \
+            | sed "s/.*\[//; s/\].*//" \
+            | tr -d "'" \
+            | tr ',' '\n' \
+            | sed 's/^ *//' \
+            | grep -v "^sandbox$\|^dr_fledgling$\|^$" \
+            | sed "s/\(.*\)/'\1'/" \
+            | tr '\n' ',' \
+            | sed "s/,$//")
+        if [[ -n "$_modules" ]]; then
+            _config_parts+=("modules: [$_modules]")
+        fi
+
+        # Extract profile from SET VARIABLE line
+        _profile=$(grep "^SET VARIABLE fledgling_profile" "$_current_init" \
+            | head -1 \
+            | sed "s/.*= '//; s/'.*//")
+        if [[ -n "$_profile" && "$_profile" != "analyst" ]]; then
+            _config_parts+=("profile: '$_profile'")
+        fi
+    fi
+
+    # Always include CLI since we're running from it
+    _config_parts+=("cli: true")
+
+    # Build config and run installer
+    if [[ ${#_config_parts[@]} -gt 0 ]]; then
+        _config=$(IFS=", "; echo "${_config_parts[*]}")
+        echo "Updating fledgling (preserving config: $_config)..."
+        curl -sL "$INSTALL_URL" | duckdb -cmd "SET VARIABLE fledgling_config = {$_config}"
+    else
+        echo "Installing fledgling (default config + CLI)..."
+        curl -sL "$INSTALL_URL" | duckdb -cmd "SET VARIABLE fledgling_config = {cli: true}"
+    fi
+
+    # Update the CLI itself
+    if [[ -f .fledgling-cli ]]; then
+        chmod +x .fledgling-cli
+        _self=$(command -v fledgling 2>/dev/null || echo "")
+        if [[ -n "$_self" && -w "$_self" ]]; then
+            cp .fledgling-cli "$_self"
+            echo "  CLI updated: $_self"
+        else
+            echo "  To update CLI: cp .fledgling-cli ~/.local/bin/fledgling"
+        fi
+    fi
     exit 0
 fi
 
