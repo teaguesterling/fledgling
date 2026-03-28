@@ -1,5 +1,6 @@
 """Tests for source retrieval macros (read_lines tier)."""
 
+import duckdb
 import pytest
 from conftest import SPEC_PATH, CONFTEST_PATH, PROJECT_ROOT
 
@@ -52,6 +53,22 @@ class TestReadSource:
         assert "content" in col_names
 
 
+    def test_nonexistent_file_raises_error(self, source_macros):
+        """Nonexistent files raise IO Error (read_lines fix in DuckDB 1.5.1)."""
+        with pytest.raises(duckdb.IOException, match="No files found"):
+            source_macros.execute(
+                "SELECT * FROM read_source('this-file-does-not-exist.txt')"
+            ).fetchall()
+
+    def test_empty_file_returns_zero_rows(self, source_macros, tmp_path):
+        empty_file = tmp_path / "empty.txt"
+        empty_file.write_text("")
+        rows = source_macros.execute(
+            "SELECT * FROM read_source(?)", [str(empty_file)]
+        ).fetchall()
+        assert len(rows) == 0
+
+
 class TestReadSourceBatch:
     def test_includes_file_path(self, source_macros):
         pattern = PROJECT_ROOT + "/docs/vision/*.md"
@@ -92,6 +109,12 @@ class TestReadContext:
         center_rows = [r for r in rows if r[1]]
         assert len(center_rows) == 1
         assert center_rows[0][0] == 10
+
+    def test_nonexistent_file_raises_error(self, source_macros):
+        with pytest.raises(duckdb.IOException, match="No files found"):
+            source_macros.execute(
+                "SELECT * FROM read_context('this-file-does-not-exist.txt', 10)"
+            ).fetchall()
 
 
 class TestProjectOverviewMacro:

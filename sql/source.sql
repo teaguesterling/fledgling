@@ -9,6 +9,7 @@
 -- read_source: Read lines from a file with optional line selection and filtering.
 -- This is the primary replacement for cat/head/tail bash commands.
 -- Use match to filter lines by case-insensitive substring match.
+-- Raises IO Error if the file does not exist (read_lines fix in DuckDB 1.5.1).
 --
 -- Examples:
 --   SELECT * FROM read_source('src/main.py');
