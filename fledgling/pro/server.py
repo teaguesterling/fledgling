@@ -220,6 +220,64 @@ def create_server(
 
         _register_tool(mcp, con, macro_name, params)
 
+    # ── MCP Resources ───────────────────────────────────────────────
+    # Static/slow-changing context available without tool calls.
+
+    @mcp.resource("fledgling://project",
+                  name="project",
+                  description="Project overview — languages, file counts, directory structure.")
+    def project_resource() -> str:
+        sections = []
+
+        overview = con.project_overview()
+        sections.append("## Languages\n")
+        sections.append(_format_markdown_table(overview.columns, overview.fetchall()))
+
+        top_level = con.list_files("*")
+        sections.append("\n## Top-Level Files\n")
+        sections.append(_format_markdown_table(top_level.columns, top_level.fetchall()))
+
+        return "\n".join(sections)
+
+    @mcp.resource("fledgling://diagnostics",
+                  name="diagnostics",
+                  description="Fledgling version, profile, loaded modules, extensions.")
+    def diagnostics_resource() -> str:
+        diag = con.dr_fledgling()
+        return _format_markdown_table(diag.columns, diag.fetchall())
+
+    @mcp.resource("fledgling://docs",
+                  name="docs",
+                  description="Documentation outline — all markdown files with section headings.")
+    def docs_resource() -> str:
+        outline = con.doc_outline("**/*.md")
+        return _format_markdown_table(outline.columns, outline.fetchall())
+
+    @mcp.resource("fledgling://git",
+                  name="git",
+                  description="Current branch, recent commits, and working tree status.")
+    def git_resource() -> str:
+        sections = []
+
+        branches = con.branch_list()
+        sections.append("## Branches\n")
+        sections.append(_format_markdown_table(branches.columns, branches.fetchall()))
+
+        commits = con.recent_changes(5)
+        sections.append("\n## Recent Commits\n")
+        sections.append(_format_markdown_table(commits.columns, commits.fetchall()))
+
+        status = con.working_tree_status()
+        status_cols = status.columns
+        status_rows = status.fetchall()
+        sections.append("\n## Working Tree Status\n")
+        if status_rows:
+            sections.append(_format_markdown_table(status_cols, status_rows))
+        else:
+            sections.append("Clean working tree.")
+
+        return "\n".join(sections)
+
     return mcp
 
 
