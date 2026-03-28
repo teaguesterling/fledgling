@@ -3,7 +3,7 @@
 -- MCP tool publications for Claude Code conversation analysis.
 -- Wraps macros from sql/conversations.sql.
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'ChatSessions',
     'Browse Claude Code conversation sessions. Shows session metadata, duration, tool usage, and token consumption. Filter by project name or date range.',
     'SELECT session_id, project_dir, slug, git_branch,
@@ -22,7 +22,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'ChatSearch',
     'Full-text search across Claude Code conversation messages. Finds matching text in both user and assistant messages. Filter by role, project, or date range.',
     'SELECT sm.session_id, sm.slug, sm.role,
@@ -42,7 +42,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'ChatToolUsage',
     'Tool usage patterns across Claude Code sessions. Shows which tools are used most frequently, with session counts and date ranges. Filter by project, session, or date range.',
     'SELECT tf.tool_name,
@@ -66,7 +66,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'ChatDetail',
     'Deep view of a single Claude Code session: metadata, token costs, and per-tool breakdown. Returns one row per tool used in the session with session metadata on every row.',
     'SELECT s.slug, s.project_dir, s.git_branch,

@@ -14,7 +14,7 @@
 --   find_calls, find_imports, complexity_hotspots, function_callers,
 --   module_dependencies
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'FindDefinitions',
     'AST-based definition search — not grep. Finds functions, classes, and variable definitions. Use name_pattern with SQL LIKE wildcards (%) to filter by name.',
     'SELECT * FROM find_definitions(
@@ -26,7 +26,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'CodeStructure',
     'Top-level structural overview of source files: definitions with line counts. Good first step for unfamiliar code. For deeper analysis, use complexity_hotspots() and module_dependencies() via the query tool.',
     'SELECT * FROM code_structure(
@@ -37,7 +37,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'FindInAST',
     'Search code by semantic category: calls, imports, definitions, loops, conditionals, strings, comments. More targeted than grep — finds structural patterns, not text matches. Output is grep-style: file:line  context.',
     'SELECT printf(''%s:%d  %s'', file_path, start_line, context) AS line

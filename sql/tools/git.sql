@@ -11,7 +11,7 @@
 --   recent_changes, branch_list, tag_list, working_tree_status,
 --   structural_diff, changed_function_summary
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'GitDiffSummary',
     'File-level summary of changes between two git revisions. Shows added, deleted, and modified files with sizes. For function-level analysis, use structural_diff() or changed_function_summary() via the query tool.',
     'SELECT * FROM file_changes(
@@ -24,7 +24,7 @@ SELECT mcp_publish_tool(
     'markdown'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'GitShow',
     'Show file content at a specific git revision with metadata (path, ref, size). Replaces `git show rev:path`.',
     'SELECT * FROM file_at_version(
@@ -37,7 +37,7 @@ SELECT mcp_publish_tool(
     'json'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'GitDiffFile',
     'Line-level unified diff of a single file between two revisions. Shows added (+), removed (-), and context lines. Use GitDiffSummary first to find changed files.',
     'SELECT printf(''%s %s'',

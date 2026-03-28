@@ -10,7 +10,7 @@
 -- Macros without tool publications (use via query tool):
 --   doc_outline, find_code_examples, doc_stats
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'MDSection',
     'Read a specific section from a markdown file by ID. Returns the raw markdown content. Use the query tool with doc_outline() to discover section IDs.',
     'SELECT content AS line FROM read_doc_section(
@@ -22,7 +22,7 @@ SELECT mcp_publish_tool(
     'text'
 );
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'MDOverview',
     'Browse documentation: shows markdown section outlines. Call with no arguments to see all docs. Use search to filter by keyword. Returns section IDs for use with MDSection.',
     'SELECT * FROM doc_outline(

@@ -13,7 +13,7 @@
 -- Macros without tool publications (use via query tool):
 --   list_files, project_overview, read_as_table
 
-SELECT mcp_publish_tool(
+PRAGMA mcp_publish_tool(
     'ReadLines',
     'Read lines from a file with optional line range, context, and match filtering. Replaces cat/head/tail.',
     'SELECT printf(''%4d  %s'', line_number, content) AS line FROM read_source(
