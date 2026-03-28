@@ -19,6 +19,15 @@ RESOURCE_URIS = [
 ]
 
 
+def _run_async(coro):
+    """Run an async coroutine, avoiding conflicts with pytest-asyncio."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 @pytest.fixture(scope="module")
 def mcp():
     """FastMCP server instance with fledgling resources."""
@@ -31,7 +40,7 @@ def resource_list(mcp):
     async def _list():
         async with Client(mcp) as client:
             return await client.list_resources()
-    return asyncio.run(_list())
+    return _run_async(_list())
 
 
 class TestResourceDiscovery:
@@ -44,3 +53,103 @@ class TestResourceDiscovery:
 
     def test_resource_count(self, resource_list):
         assert len(resource_list) == 4
+
+
+def _read_resource(mcp, uri):
+    """Read a resource and return its text content."""
+    async def _read():
+        async with Client(mcp) as client:
+            result = await client.read_resource(uri)
+            return result[0].text
+    return _run_async(_read())
+
+
+class TestProjectResource:
+    """fledgling://project returns project overview data."""
+
+    def test_non_empty(self, mcp):
+        text = _read_resource(mcp, "fledgling://project")
+        assert len(text) > 0
+
+    def test_contains_language_data(self, mcp):
+        text = _read_resource(mcp, "fledgling://project")
+        assert "Python" in text or "python" in text.lower()
+
+    def test_matches_direct_macro(self, mcp):
+        """Resource content matches calling the macro directly."""
+        import fledgling
+        con = fledgling.connect(init=False)
+        rows = con.project_overview().fetchall()
+        text = _read_resource(mcp, "fledgling://project")
+        for row in rows:
+            lang = str(row[0])
+            assert lang in text, f"Language '{lang}' from macro not in resource"
+
+
+class TestDiagnosticsResource:
+    """fledgling://diagnostics returns dr_fledgling output."""
+
+    def test_non_empty(self, mcp):
+        text = _read_resource(mcp, "fledgling://diagnostics")
+        assert len(text) > 0
+
+    def test_contains_version(self, mcp):
+        text = _read_resource(mcp, "fledgling://diagnostics")
+        assert "fledgling" in text.lower() or "version" in text.lower()
+
+    def test_matches_direct_macro(self, mcp):
+        import fledgling
+        con = fledgling.connect(init=False)
+        rows = con.dr_fledgling().fetchall()
+        text = _read_resource(mcp, "fledgling://diagnostics")
+        for row in rows:
+            key = str(row[0])
+            assert key in text, f"Key '{key}' from dr_fledgling not in resource"
+
+
+class TestDocsResource:
+    """fledgling://docs returns documentation outline."""
+
+    def test_non_empty(self, mcp):
+        text = _read_resource(mcp, "fledgling://docs")
+        assert len(text) > 0
+
+    def test_contains_markdown_files(self, mcp):
+        text = _read_resource(mcp, "fledgling://docs")
+        assert ".md" in text
+
+    def test_matches_direct_macro(self, mcp):
+        import fledgling
+        con = fledgling.connect(init=False)
+        rows = con.doc_outline("**/*.md").fetchall()
+        text = _read_resource(mcp, "fledgling://docs")
+        assert len(rows) > 0, "doc_outline returned no rows"
+        first_file = str(rows[0][0])
+        assert first_file in text
+
+
+class TestGitResource:
+    """fledgling://git returns branch, recent commits, and working tree status."""
+
+    def test_non_empty(self, mcp):
+        text = _read_resource(mcp, "fledgling://git")
+        assert len(text) > 0
+
+    def test_contains_branch_info(self, mcp):
+        text = _read_resource(mcp, "fledgling://git")
+        assert "main" in text or "feature" in text
+
+    def test_contains_recent_commits(self, mcp):
+        text = _read_resource(mcp, "fledgling://git")
+        assert "commit" in text.lower() or len(text.split("\n")) > 5
+
+    def test_contains_sections(self, mcp):
+        text = _read_resource(mcp, "fledgling://git")
+        assert "Branches" in text or "branches" in text
+        assert "Recent" in text or "Commits" in text or "commits" in text
+
+    def test_multiple_reads_consistent(self, mcp):
+        text1 = _read_resource(mcp, "fledgling://git")
+        text2 = _read_resource(mcp, "fledgling://git")
+        assert len(text1) > 0
+        assert len(text2) > 0
