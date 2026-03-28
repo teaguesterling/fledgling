@@ -22,6 +22,25 @@ class ProjectDefaults:
     languages: list[str] = field(default_factory=list)
 
 
+def apply_defaults(
+    defaults: ProjectDefaults,
+    tool_name: str,
+    kwargs: dict[str, object],
+) -> dict[str, object]:
+    """Substitute None params with smart defaults for a given tool.
+
+    Returns a new dict — does not mutate the input.
+    """
+    mapping = TOOL_DEFAULTS.get(tool_name)
+    if not mapping:
+        return kwargs
+    result = dict(kwargs)
+    for param, field_name in mapping.items():
+        if param in result and result[param] is None:
+            result[param] = getattr(defaults, field_name)
+    return result
+
+
 # Tool name → {param_name: defaults_field_name}
 TOOL_DEFAULTS: dict[str, dict[str, str]] = {
     "find_definitions":         {"file_pattern": "code_pattern"},

@@ -2,7 +2,7 @@
 
 from dataclasses import fields
 
-from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS
+from fledgling.pro.defaults import ProjectDefaults, TOOL_DEFAULTS, apply_defaults
 
 
 class TestProjectDefaults:
@@ -63,3 +63,54 @@ class TestToolDefaults:
                 assert field_name in valid_fields, (
                     f"{tool}: '{field_name}' is not a ProjectDefaults field"
                 )
+
+
+class TestApplyDefaults:
+    """apply_defaults substitutes None params from ProjectDefaults."""
+
+    def setup_method(self):
+        self.defaults = ProjectDefaults(
+            code_pattern="**/*.py",
+            doc_pattern="docs/**/*.md",
+            main_branch="main",
+            languages=["python"],
+        )
+
+    def test_substitutes_none_code_pattern(self):
+        kwargs = {"file_pattern": None, "name_pattern": "%"}
+        result = apply_defaults(self.defaults, "find_definitions", kwargs)
+        assert result["file_pattern"] == "**/*.py"
+        assert result["name_pattern"] == "%"
+
+    def test_preserves_explicit_value(self):
+        kwargs = {"file_pattern": "src/**/*.rs"}
+        result = apply_defaults(self.defaults, "find_definitions", kwargs)
+        assert result["file_pattern"] == "src/**/*.rs"
+
+    def test_unknown_tool_passes_through(self):
+        kwargs = {"file_pattern": None}
+        result = apply_defaults(self.defaults, "unknown_tool", kwargs)
+        assert result["file_pattern"] is None
+
+    def test_git_tool_defaults(self):
+        kwargs = {"from_rev": None, "to_rev": None, "repo": "."}
+        result = apply_defaults(self.defaults, "file_changes", kwargs)
+        assert result["from_rev"] == "HEAD~1"
+        assert result["to_rev"] == "HEAD"
+        assert result["repo"] == "."
+
+    def test_git_tool_explicit_overrides(self):
+        kwargs = {"from_rev": "abc123", "to_rev": None}
+        result = apply_defaults(self.defaults, "file_changes", kwargs)
+        assert result["from_rev"] == "abc123"
+        assert result["to_rev"] == "HEAD"
+
+    def test_doc_tool_defaults(self):
+        kwargs = {"file_pattern": None, "max_lvl": 3}
+        result = apply_defaults(self.defaults, "doc_outline", kwargs)
+        assert result["file_pattern"] == "docs/**/*.md"
+
+    def test_does_not_mutate_input(self):
+        kwargs = {"file_pattern": None}
+        apply_defaults(self.defaults, "find_definitions", kwargs)
+        assert kwargs["file_pattern"] is None
