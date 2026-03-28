@@ -42,7 +42,7 @@ def apply_defaults(
         return kwargs
     result = dict(kwargs)
     for param, field_name in mapping.items():
-        if param in result and result[param] is None:
+        if result.get(param) is None:
             result[param] = getattr(defaults, field_name)
     return result
 
@@ -109,11 +109,12 @@ _DOC_DIRS = ["docs", "documentation", "doc", "wiki"]
 
 
 def _code_glob(extensions: list[str]) -> str:
-    """Build a glob pattern from a list of extensions."""
-    if len(extensions) == 1:
-        return f"**/*.{extensions[0]}"
-    joined = ",".join(extensions)
-    return f"**/*.{{{joined}}}"
+    """Build a glob pattern from a list of extensions.
+
+    Uses only the primary (first) extension because DuckDB's glob()
+    does not support brace expansion (e.g. ``**/*.{py,pyi}``).
+    """
+    return f"**/*.{extensions[0]}"
 
 
 def _find_doc_dir(con: Connection) -> str | None:

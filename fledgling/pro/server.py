@@ -192,9 +192,16 @@ def _register_tool(
             if isinstance(v, str) and v.isdigit():
                 filtered[k] = int(v)
         macro = getattr(con, macro_name)
-        rel = macro(**filtered)
-
-        rows = rel.fetchall()
+        try:
+            rel = macro(**filtered)
+            rows = rel.fetchall()
+        except Exception as e:
+            # DuckDB raises IO errors for globs matching zero files,
+            # invalid paths, etc. — treat as empty results.
+            err = str(e).lower()
+            if "no file" in err or "does not exist" in err or "read_ast" in err:
+                return "(no results)"
+            raise
         if not rows:
             return "(no results)"
 

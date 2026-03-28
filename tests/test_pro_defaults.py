@@ -1,5 +1,6 @@
 """Tests for fledgling.pro.defaults — smart project-aware defaults."""
 
+import asyncio
 import pytest
 from dataclasses import fields
 
@@ -112,6 +113,13 @@ class TestApplyDefaults:
         kwargs = {"file_pattern": None, "max_lvl": 3}
         result = apply_defaults(self.defaults, "doc_outline", kwargs)
         assert result["file_pattern"] == "docs/**/*.md"
+
+    def test_substitutes_absent_param(self):
+        """Absent params (not just None) get defaults injected."""
+        kwargs = {"name_pattern": "%"}
+        result = apply_defaults(self.defaults, "find_definitions", kwargs)
+        assert result["file_pattern"] == "**/*.py"
+        assert result["name_pattern"] == "%"
 
     def test_does_not_mutate_input(self):
         kwargs = {"file_pattern": None}
@@ -235,3 +243,62 @@ class TestServerIntegration:
         """Defaults reflect this project (Python, docs/)."""
         assert "py" in server._defaults.code_pattern
         assert server._defaults.doc_pattern.startswith("docs/")
+
+
+@pytest.mark.skipif(not _has_fastmcp, reason="fastmcp not installed")
+class TestToolCallDefaults:
+    """Tools use defaults when called without explicit patterns."""
+
+    @pytest.fixture(scope="class")
+    def server(self):
+        return create_server(root=str(PROJECT_ROOT))
+
+    @staticmethod
+    def _call(server, tool_name, arguments):
+        """Call a tool on the FastMCP server and return the text result."""
+        result = asyncio.run(server.call_tool(tool_name, arguments))
+        # ToolResult.content is a list of TextContent
+        return result.content[0].text
+
+    def test_find_definitions_uses_default_pattern(self, server):
+        """find_definitions with no file_pattern uses inferred default."""
+        result = self._call(server, "find_definitions", {})
+        assert result != "(no results)"
+        # Should find Python definitions (this is a Python project)
+        assert "def" in result.lower() or "class" in result.lower() or "|" in result
+
+    def test_find_definitions_explicit_overrides(self, server):
+        """Explicit pattern overrides the default."""
+        result = self._call(
+            server, "find_definitions", {"file_pattern": "nonexistent/**/*.xyz"}
+        )
+        assert result == "(no results)"
+
+    def test_doc_outline_uses_default_pattern(self, server):
+        """doc_outline with no file_pattern uses inferred doc pattern."""
+        result = self._call(server, "doc_outline", {})
+        assert result != "(no results)"
+
+    def test_doc_outline_explicit_overrides(self, server):
+        """Explicit doc pattern overrides the default."""
+        result = self._call(
+            server, "doc_outline", {"file_pattern": "nonexistent/**/*.xyz"}
+        )
+        assert result == "(no results)"
+
+    def test_code_structure_uses_default_pattern(self, server):
+        """code_structure with no file_pattern uses inferred default."""
+        result = self._call(server, "code_structure", {})
+        assert result != "(no results)"
+
+    def test_code_structure_explicit_overrides(self, server):
+        """Explicit pattern overrides the default for code_structure."""
+        result = self._call(
+            server, "code_structure", {"file_pattern": "nonexistent/**/*.xyz"}
+        )
+        assert result == "(no results)"
+
+    def test_complexity_hotspots_uses_default_pattern(self, server):
+        """complexity_hotspots with no file_pattern uses inferred default."""
+        result = self._call(server, "complexity_hotspots", {})
+        assert result != "(no results)"
