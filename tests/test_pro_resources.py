@@ -67,26 +67,26 @@ def _read_resource(mcp, uri):
 class TestProjectResource:
     """fledgling://project returns project overview data."""
 
-    def test_non_empty(self, mcp):
-        text = _read_resource(mcp, "fledgling://project")
+    @pytest.fixture(scope="class")
+    def text(self, mcp):
+        return _read_resource(mcp, "fledgling://project")
+
+    def test_non_empty(self, text):
         assert len(text) > 0
 
-    def test_contains_language_data(self, mcp):
-        text = _read_resource(mcp, "fledgling://project")
-        assert "Python" in text or "python" in text.lower()
+    def test_contains_language_data(self, text):
+        assert "python" in text.lower()
 
-    def test_contains_top_level_files(self, mcp):
-        text = _read_resource(mcp, "fledgling://project")
+    def test_contains_top_level_files(self, text):
         # list_files('*') data should include top-level files
         assert "Top-Level" in text
         assert "pyproject.toml" in text or "README" in text
 
-    def test_matches_direct_macro(self, mcp):
+    def test_matches_direct_macro(self, text):
         """Resource content matches calling the macro directly."""
         import fledgling
         con = fledgling.connect(init=False)
         rows = con.project_overview().fetchall()
-        text = _read_resource(mcp, "fledgling://project")
         for row in rows:
             lang = str(row[0])
             assert lang in text, f"Language '{lang}' from macro not in resource"
@@ -95,19 +95,20 @@ class TestProjectResource:
 class TestDiagnosticsResource:
     """fledgling://diagnostics returns dr_fledgling output."""
 
-    def test_non_empty(self, mcp):
-        text = _read_resource(mcp, "fledgling://diagnostics")
+    @pytest.fixture(scope="class")
+    def text(self, mcp):
+        return _read_resource(mcp, "fledgling://diagnostics")
+
+    def test_non_empty(self, text):
         assert len(text) > 0
 
-    def test_contains_version(self, mcp):
-        text = _read_resource(mcp, "fledgling://diagnostics")
+    def test_contains_version(self, text):
         assert "fledgling" in text.lower() or "version" in text.lower()
 
-    def test_matches_direct_macro(self, mcp):
+    def test_matches_direct_macro(self, text):
         import fledgling
         con = fledgling.connect(init=False)
         rows = con.dr_fledgling().fetchall()
-        text = _read_resource(mcp, "fledgling://diagnostics")
         for row in rows:
             key = str(row[0])
             assert key in text, f"Key '{key}' from dr_fledgling not in resource"
@@ -116,19 +117,20 @@ class TestDiagnosticsResource:
 class TestDocsResource:
     """fledgling://docs returns documentation outline."""
 
-    def test_non_empty(self, mcp):
-        text = _read_resource(mcp, "fledgling://docs")
+    @pytest.fixture(scope="class")
+    def text(self, mcp):
+        return _read_resource(mcp, "fledgling://docs")
+
+    def test_non_empty(self, text):
         assert len(text) > 0
 
-    def test_contains_markdown_files(self, mcp):
-        text = _read_resource(mcp, "fledgling://docs")
+    def test_contains_markdown_files(self, text):
         assert ".md" in text
 
-    def test_matches_direct_macro(self, mcp):
+    def test_matches_direct_macro(self, text):
         import fledgling
         con = fledgling.connect(init=False)
         rows = con.doc_outline("**/*.md").fetchall()
-        text = _read_resource(mcp, "fledgling://docs")
         assert len(rows) > 0, "doc_outline returned no rows"
         first_file = str(rows[0][0])
         assert first_file in text
@@ -137,28 +139,27 @@ class TestDocsResource:
 class TestGitResource:
     """fledgling://git returns branch, recent commits, and working tree status."""
 
-    def test_non_empty(self, mcp):
-        text = _read_resource(mcp, "fledgling://git")
+    @pytest.fixture(scope="class")
+    def text(self, mcp):
+        return _read_resource(mcp, "fledgling://git")
+
+    def test_non_empty(self, text):
         assert len(text) > 0
 
-    def test_contains_branch_info(self, mcp):
-        text = _read_resource(mcp, "fledgling://git")
+    def test_contains_branch_info(self, text):
         assert "main" in text or "feature" in text
 
-    def test_contains_recent_commits(self, mcp):
-        text = _read_resource(mcp, "fledgling://git")
+    def test_contains_recent_commits(self, text):
         assert "commit" in text.lower() or len(text.split("\n")) > 5
 
-    def test_contains_sections(self, mcp):
-        text = _read_resource(mcp, "fledgling://git")
+    def test_contains_sections(self, text):
         assert "Branches" in text or "branches" in text
         assert "Recent" in text or "Commits" in text or "commits" in text
 
-    def test_matches_direct_macros(self, mcp):
+    def test_matches_direct_macros(self, text):
         import fledgling
         con = fledgling.connect(init=False)
         branches = con.branch_list().fetchall()
-        text = _read_resource(mcp, "fledgling://git")
         for row in branches:
             branch_name = str(row[0])
             assert branch_name in text, f"Branch '{branch_name}' not in resource"
@@ -167,7 +168,7 @@ class TestGitResource:
         text1 = _read_resource(mcp, "fledgling://git")
         text2 = _read_resource(mcp, "fledgling://git")
         assert len(text1) > 0
-        assert len(text2) > 0
+        assert text1 == text2
 
 
 class TestResourcesWorkWithoutToolCalls:
