@@ -196,10 +196,11 @@ def _register_tool(
             rel = macro(**filtered)
             rows = rel.fetchall()
         except Exception as e:
-            # DuckDB raises IO errors for globs matching zero files,
-            # invalid paths, etc. — treat as empty results.
-            err = str(e).lower()
-            if "no file" in err or "does not exist" in err or "read_ast" in err:
+            # DuckDB raises IOException (sitting_duck) or
+            # InvalidInputException (markdown) for globs matching
+            # zero files. Treat as empty results.
+            etype = type(e).__name__
+            if etype in ("IOException", "InvalidInputException"):
                 return "(no results)"
             raise
         if not rows:

@@ -39,7 +39,7 @@ def apply_defaults(
     """
     mapping = TOOL_DEFAULTS.get(tool_name)
     if not mapping:
-        return kwargs
+        return dict(kwargs)
     result = dict(kwargs)
     for param, field_name in mapping.items():
         if result.get(param) is None:
