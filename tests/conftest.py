@@ -150,6 +150,7 @@ V1_TOOLS = [
     "CodeStructure",
     "FindInAST",
     "MDSection",
+    "MDOverview",
     "GitDiffSummary",
     "GitDiffFile",
     "GitShow",

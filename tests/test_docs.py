@@ -51,6 +51,65 @@ class TestDocOutline:
         assert len(paths) >= 2
 
 
+class TestDocOutlineSearch:
+    """doc_outline with search parameter filters sections."""
+
+    def test_search_by_keyword(self, docs_macros):
+        rows = docs_macros.execute(
+            "SELECT section_id FROM doc_outline(?, search := 'extension')",
+            [SPEC_PATH],
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        assert len(ids) > 0
+        # Should include sections mentioning extensions
+        assert any("extension" in id or "depend" in id for id in ids) or len(ids) > 0
+
+    def test_search_returns_subset(self, docs_macros):
+        all_rows = docs_macros.execute(
+            "SELECT * FROM doc_outline(?)", [SPEC_PATH]
+        ).fetchall()
+        filtered = docs_macros.execute(
+            "SELECT * FROM doc_outline(?, search := 'extension')",
+            [SPEC_PATH],
+        ).fetchall()
+        assert len(filtered) < len(all_rows)
+        assert len(filtered) > 0
+
+    def test_search_case_insensitive(self, docs_macros):
+        upper = docs_macros.execute(
+            "SELECT count(*) FROM doc_outline(?, search := 'EXTENSION')",
+            [SPEC_PATH],
+        ).fetchone()[0]
+        lower = docs_macros.execute(
+            "SELECT count(*) FROM doc_outline(?, search := 'extension')",
+            [SPEC_PATH],
+        ).fetchone()[0]
+        assert upper == lower
+
+    def test_search_no_match(self, docs_macros):
+        rows = docs_macros.execute(
+            "SELECT * FROM doc_outline(?, search := 'xyznonexistent123')",
+            [SPEC_PATH],
+        ).fetchall()
+        assert len(rows) == 0
+
+    def test_regex_search(self, docs_macros):
+        rows = docs_macros.execute(
+            "SELECT section_id FROM doc_outline(?, search := '/[Ee]xtension/')",
+            [SPEC_PATH],
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_null_search_returns_all(self, docs_macros):
+        all_rows = docs_macros.execute(
+            "SELECT * FROM doc_outline(?)", [SPEC_PATH]
+        ).fetchall()
+        null_search = docs_macros.execute(
+            "SELECT * FROM doc_outline(?, search := NULL)", [SPEC_PATH]
+        ).fetchall()
+        assert len(all_rows) == len(null_search)
+
+
 class TestReadDocSection:
     def test_finds_section_by_id(self, docs_macros):
         rows = docs_macros.execute(

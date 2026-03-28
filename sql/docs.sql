@@ -5,12 +5,17 @@
 
 -- doc_outline: Get the structural outline (table of contents) of markdown files.
 -- Lets the agent decide what to read before committing tokens.
+-- Optional search parameter filters to sections whose title or content
+-- matches the term. Search modes:
+--   'term'     — case-insensitive substring match (ILIKE)
+--   '/regex/'  — regular expression match (regexp_matches)
 --
 -- Examples:
---   SELECT * FROM doc_outline('README.md');
---   SELECT * FROM doc_outline('docs/**/*.md');
+--   SELECT * FROM doc_outline('**/*.md');
 --   SELECT * FROM doc_outline('docs/**/*.md', 2);
-CREATE OR REPLACE MACRO doc_outline(file_pattern, max_lvl := 3) AS TABLE
+--   SELECT * FROM doc_outline('**/*.md', search := 'install');
+--   SELECT * FROM doc_outline('**/*.md', search := '/^## (API|CLI)/');
+CREATE OR REPLACE MACRO doc_outline(file_pattern, max_lvl := 3, search := NULL) AS TABLE
     SELECT
         file_path,
         section_id,
@@ -25,6 +30,15 @@ CREATE OR REPLACE MACRO doc_outline(file_pattern, max_lvl := 3) AS TABLE
         max_level := max_lvl,
         include_filepath := true
     )
+    WHERE search IS NULL
+       OR (search LIKE '/%/' AND (
+              regexp_matches(title, search[2:-2], 'i')
+              OR regexp_matches(content, search[2:-2], 'i')
+           ))
+       OR (search NOT LIKE '/%/' AND (
+              title ILIKE '%' || search || '%'
+              OR content ILIKE '%' || search || '%'
+           ))
     ORDER BY file_path, start_line;
 
 -- read_doc_section: Read a specific section from a markdown file.

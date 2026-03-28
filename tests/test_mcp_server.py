@@ -270,6 +270,24 @@ class TestCodeToolsPython:
 # -- Docs --
 
 
+class TestMDOverview:
+    def test_default_returns_all_docs(self, mcp_server):
+        text = call_tool(mcp_server, "MDOverview", {})
+        assert md_row_count(text) > 5
+        # Should find markdown files in the project
+        assert "README" in text or "SKILL" in text or "CLAUDE" in text
+
+    def test_search_filters(self, mcp_server):
+        all_text = call_tool(mcp_server, "MDOverview", {})
+        filtered = call_tool(mcp_server, "MDOverview", {"search": "macro"})
+        assert md_row_count(filtered) > 0
+        assert md_row_count(filtered) < md_row_count(all_text)
+
+    def test_search_no_match(self, mcp_server):
+        text = call_tool(mcp_server, "MDOverview", {"search": "xyznonexistent123"})
+        assert md_row_count(text) == 0
+
+
 class TestMDSection:
     """MDSection uses text format: returns raw markdown content."""
 
