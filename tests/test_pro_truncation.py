@@ -58,7 +58,12 @@ class TestTruncateRows:
     def test_omission_message_has_counts(self):
         rows = list(range(100))
         _, omission = _truncate_rows(rows, 50, "read_source")
-        assert "90 of 100" in omission
+        assert "90 of 100 lines" in omission
+
+    def test_omission_message_says_rows_for_discovery(self):
+        rows = list(range(100))
+        _, omission = _truncate_rows(rows, 50, "find_definitions")
+        assert "90 of 100 rows" in omission
 
     def test_omission_message_has_hint(self):
         rows = list(range(100))
@@ -200,9 +205,10 @@ class TestTextTruncation:
         fn = tools["read_source"].fn
         result = await fn(
             file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            lines="1-500",
+            lines="1-10",
         )
         assert "--- omitted" not in result
+        assert "(no results)" not in result
 
     @pytest.mark.anyio
     async def test_read_source_match_bypasses(self, mcp):

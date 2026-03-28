@@ -20,6 +20,7 @@ Usage::
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Optional
 
@@ -155,7 +156,8 @@ def _truncate_rows(rows, max_rows, macro_name):
     tail = rows[-_HEAD_TAIL:]
     omitted = total - 2 * _HEAD_TAIL
     hint = _HINTS.get(macro_name, "")
-    msg = f"--- omitted {omitted} of {total} rows ---"
+    unit = "lines" if macro_name in _MAX_LINES else "rows"
+    msg = f"--- omitted {omitted} of {total} {unit} ---"
     if hint:
         msg += f"\n{hint}"
     return head + tail, msg
@@ -264,12 +266,12 @@ def _register_tool(
         if range_params and any(kwargs.get(p) is not None for p in range_params):
             max_rows = 0
 
-        # Remove None values (optional params not provided)
-        filtered = {k: v for k, v in kwargs.items() if v is not None}
-        # Convert string numbers to int where needed
-        for k, v in filtered.items():
-            if isinstance(v, str) and v.isdigit():
-                filtered[k] = int(v)
+        # Remove None values; coerce digit strings to int
+        filtered = {
+            k: (int(v) if isinstance(v, str) and v.isdigit() else v)
+            for k, v in kwargs.items()
+            if v is not None
+        }
         macro = getattr(con, macro_name)
         rel = macro(**filtered)
 
@@ -318,7 +320,6 @@ def _register_tool(
     tool_fn.__doc__ = description
 
     # Build parameter annotations for FastMCP schema generation
-    import typing
     annotations = {}
     for p in params:
         annotations[p] = Optional[str]
@@ -327,7 +328,6 @@ def _register_tool(
     tool_fn.__annotations__ = {**annotations, "return": str}
 
     # Create proper signature with Optional[str] defaults
-    import inspect
     sig_params = [
         inspect.Parameter(
             p,
