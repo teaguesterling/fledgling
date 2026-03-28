@@ -39,13 +39,14 @@ SELECT mcp_publish_tool(
 
 SELECT mcp_publish_tool(
     'FindInAST',
-    'Search code by semantic category: calls, imports, definitions, loops, conditionals, strings, comments. More targeted than grep — finds structural patterns, not text matches.',
-    'SELECT * FROM find_in_ast(
+    'Search code by semantic category: calls, imports, definitions, loops, conditionals, strings, comments. More targeted than grep — finds structural patterns, not text matches. Output is grep-style: file:line  context.',
+    'SELECT printf(''%s:%d  %s'', file_path, start_line, context) AS line
+     FROM find_in_ast(
         _resolve($file_pattern),
         $kind,
         COALESCE(NULLIF($name_pattern, ''null''), ''%'')
     )',
     '{"file_pattern": {"type": "string", "description": "Glob pattern for files (e.g. src/**/*.py)"}, "kind": {"type": "string", "description": "What to find: calls, imports, definitions, loops, conditionals, strings, comments"}, "name_pattern": {"type": "string", "description": "SQL LIKE filter on name (e.g. connect%). Default: all"}}',
     '["file_pattern", "kind"]',
-    'markdown'
+    'text'
 );

@@ -93,7 +93,6 @@ CREATE OR REPLACE MACRO find_in_ast(file_pattern, kind, name_pattern := '%') AS 
     SELECT
         file_path,
         name,
-        semantic_type_to_string(semantic_type) AS type,
         start_line,
         peek AS context
     FROM read_ast(file_pattern)

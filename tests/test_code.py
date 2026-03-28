@@ -131,7 +131,6 @@ class TestFindInAST:
         col_names = [r[0] for r in desc]
         assert "file_path" in col_names
         assert "name" in col_names
-        assert "type" in col_names
         assert "start_line" in col_names
         assert "context" in col_names
 

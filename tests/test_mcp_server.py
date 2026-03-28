@@ -143,19 +143,21 @@ class TestCodeStructure:
 
 
 class TestFindInAST:
+    """FindInAST uses text format: grep-style file:line  context."""
+
     def test_finds_calls(self, mcp_server):
         text = call_tool(mcp_server, "FindInAST", {
             "file_pattern": CONFTEST_PATH,
             "kind": "calls",
         })
-        assert md_row_count(text) > 0
+        assert text_line_count(text) > 0
 
     def test_finds_imports(self, mcp_server):
         text = call_tool(mcp_server, "FindInAST", {
             "file_pattern": CONFTEST_PATH,
             "kind": "imports",
         })
-        assert md_row_count(text) > 0
+        assert text_line_count(text) > 0
         assert "import" in text.lower() or "os" in text
 
     def test_name_filter(self, mcp_server):
@@ -164,8 +166,18 @@ class TestFindInAST:
             "kind": "calls",
             "name_pattern": "execute%",
         })
-        assert md_row_count(text) > 0
+        assert text_line_count(text) > 0
         assert "execute" in text
+
+    def test_grep_style_output(self, mcp_server):
+        text = call_tool(mcp_server, "FindInAST", {
+            "file_pattern": CONFTEST_PATH,
+            "kind": "imports",
+        })
+        # Each line should be file:line  context
+        lines = [l for l in text.strip().split("\n") if l.strip()]
+        assert len(lines) > 0
+        assert ":" in lines[0]  # file:line format
 
 
 # -- Code: Multi-language (sitting_duck test data) --
@@ -259,12 +271,16 @@ class TestCodeToolsPython:
 
 
 class TestMDSection:
+    """MDSection uses text format: returns raw markdown content."""
+
     def test_reads_specific_section(self, mcp_server):
         text = call_tool(mcp_server, "MDSection", {
             "file_path": SPEC_PATH,
             "section_id": "architecture",
         })
-        assert "architecture" in text.lower()
+        # Section content is returned as raw markdown text
+        assert len(text.strip()) > 100
+        assert "duckdb" in text.lower() or "fledgling" in text.lower()
 
 
 # -- Git --

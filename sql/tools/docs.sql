@@ -12,12 +12,12 @@
 
 SELECT mcp_publish_tool(
     'MDSection',
-    'Read a specific section from a markdown file by ID. Use the query tool with doc_outline() to discover section IDs.',
-    'SELECT * FROM read_doc_section(
+    'Read a specific section from a markdown file by ID. Returns the raw markdown content. Use the query tool with doc_outline() to discover section IDs.',
+    'SELECT content AS line FROM read_doc_section(
         _resolve($file_path),
         $section_id
     )',
     '{"file_path": {"type": "string", "description": "Path to the markdown file"}, "section_id": {"type": "string", "description": "Section ID (e.g. installation, getting-started). Use doc_outline() via query tool to discover IDs."}}',
     '["file_path", "section_id"]',
-    'json'
+    'text'
 );
