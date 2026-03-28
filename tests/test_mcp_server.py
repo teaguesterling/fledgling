@@ -335,7 +335,7 @@ class TestGitDiffFile:
     def test_shows_additions_and_removals(self, mcp_server):
         text = call_tool(mcp_server, "GitDiffFile", {
             "file": "sql/code.sql",
-            "from_rev": "HEAD~3",
+            "from_rev": "HEAD~10",
             "to_rev": "HEAD",
         })
         assert "+" in text or "-" in text
