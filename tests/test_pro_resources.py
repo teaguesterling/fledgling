@@ -16,6 +16,7 @@ RESOURCE_URIS = [
     "fledgling://diagnostics",
     "fledgling://docs",
     "fledgling://git",
+    "fledgling://session",
 ]
 
 
@@ -52,7 +53,7 @@ class TestResourceDiscovery:
             assert expected in uris, f"{expected} not in {uris}"
 
     def test_resource_count(self, resource_list):
-        assert len(resource_list) == 4
+        assert len(resource_list) == 5
 
 
 def _read_resource(mcp, uri):
