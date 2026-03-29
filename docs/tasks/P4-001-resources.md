@@ -1,6 +1,6 @@
 # P4-001: MCP Resources — Always-Available Context
 
-## Status: Ready
+## Status: Done
 
 ## Problem
 

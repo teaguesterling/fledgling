@@ -24,8 +24,6 @@ import inspect
 import os
 from typing import Optional
 
-from fastmcp import FastMCP
-
 import fledgling
 from fledgling.connection import Connection
 from fledgling.pro.defaults import (
@@ -98,8 +96,8 @@ _SKIP = {
 
 # Output format hints — which macros return content vs. structure
 _TEXT_FORMAT = {
-    "read_source", "read_context", "file_diff", "find_in_ast",
-    "read_doc_section", "help",
+    "read_source", "read_context", "file_diff", "file_at_version",
+    "find_in_ast", "read_doc_section", "help",
 }
 
 # Params that should be coerced from string to int.
@@ -109,6 +107,70 @@ _NUMERIC_PARAMS = {
     "context_lines", "limit",
 }
 
+# ── Token-aware truncation ──────────────────────────────────────────
+# Default row limits by tool.  0 = no limit.
+
+_MAX_LINES = {
+    "read_source": 200,
+    "read_context": 50,
+    "file_diff": 300,
+    "file_at_version": 200,
+}
+
+_MAX_ROWS = {
+    "find_definitions": 50,
+    "find_in_ast": 50,
+    "list_files": 100,
+    "doc_outline": 50,
+    "file_changes": 25,
+    "recent_changes": 20,
+}
+
+# Parameters that indicate the user narrowed their query — skip truncation.
+_RANGE_PARAMS = {
+    "read_source": {"lines", "match"},
+    "find_definitions": {"name_pattern"},
+    "find_in_ast": {"name"},
+    "doc_outline": {"search"},
+}
+
+_HINTS = {
+    "read_source": "Use lines='N-M' to see a range, or match='keyword' to filter.",
+    "read_context": "Use a smaller context window or match='keyword' to filter.",
+    "file_diff": "Use a narrower revision range.",
+    "file_at_version": "Use lines='N-M' to see a range.",
+    "find_definitions": "Use name_pattern='%keyword%' to narrow, or file_pattern to scope.",
+    "find_in_ast": "Use name='keyword' to narrow results.",
+    "list_files": "Use a more specific glob pattern.",
+    "doc_outline": "Use search='keyword' to filter.",
+    "file_changes": "Use a narrower revision range.",
+    "recent_changes": "Use a smaller count.",
+}
+
+_HEAD_TAIL = 5  # rows to show at each end of truncated output
+
+
+def _truncate_rows(rows, max_rows, macro_name):
+    """Truncate rows to head + tail with an omission message.
+
+    Returns (display_rows, omission_line) where omission_line is None
+    if no truncation occurred.
+    """
+    total = len(rows)
+    if max_rows <= 0 or total <= max_rows:
+        return rows, None
+    # Not enough rows for a clean head/tail split — return all
+    if total <= 2 * _HEAD_TAIL:
+        return rows, None
+    head = rows[:_HEAD_TAIL]
+    tail = rows[-_HEAD_TAIL:]
+    omitted = total - 2 * _HEAD_TAIL
+    hint = _HINTS.get(macro_name, "")
+    unit = "lines" if macro_name in _MAX_LINES else "rows"
+    msg = f"--- omitted {omitted} of {total} {unit} ---"
+    if hint:
+        msg += f"\n{hint}"
+    return head + tail, msg
 
 def _format_markdown_table(cols: list[str], rows: list[tuple]) -> str:
     """Format query results as a markdown table."""
@@ -152,6 +214,8 @@ def create_server(
     Returns:
         A FastMCP server instance ready to .run().
     """
+    from fastmcp import FastMCP
+
     con = fledgling.connect(init=init, root=root, modules=modules, profile=profile)
     mcp = FastMCP(name)
 
@@ -171,6 +235,64 @@ def create_server(
 
         _register_tool(mcp, con, macro_name, params, defaults)
 
+    # ── MCP Resources ───────────────────────────────────────────────
+    # Static/slow-changing context available without tool calls.
+
+    @mcp.resource("fledgling://project",
+                  name="project",
+                  description="Project overview — languages, file counts, directory structure.")
+    def project_resource() -> str:
+        sections = []
+
+        overview = con.project_overview()
+        sections.append("## Languages\n")
+        sections.append(_format_markdown_table(overview.columns, overview.fetchall()))
+
+        top_level = con.list_files("*")
+        sections.append("\n## Top-Level Files\n")
+        sections.append(_format_markdown_table(top_level.columns, top_level.fetchall()))
+
+        return "\n".join(sections)
+
+    @mcp.resource("fledgling://diagnostics",
+                  name="diagnostics",
+                  description="Fledgling version, profile, loaded modules, extensions.")
+    def diagnostics_resource() -> str:
+        diag = con.dr_fledgling()
+        return _format_markdown_table(diag.columns, diag.fetchall())
+
+    @mcp.resource("fledgling://docs",
+                  name="docs",
+                  description="Documentation outline — all markdown files with section headings.")
+    def docs_resource() -> str:
+        outline = con.doc_outline("**/*.md")
+        return _format_markdown_table(outline.columns, outline.fetchall())
+
+    @mcp.resource("fledgling://git",
+                  name="git",
+                  description="Current branch, recent commits, and working tree status.")
+    def git_resource() -> str:
+        sections = []
+
+        branches = con.branch_list()
+        sections.append("## Branches\n")
+        sections.append(_format_markdown_table(branches.columns, branches.fetchall()))
+
+        commits = con.recent_changes(5)
+        sections.append("\n## Recent Commits\n")
+        sections.append(_format_markdown_table(commits.columns, commits.fetchall()))
+
+        status = con.working_tree_status()
+        status_cols = status.columns
+        status_rows = status.fetchall()
+        sections.append("\n## Working Tree Status\n")
+        if status_rows:
+            sections.append(_format_markdown_table(status_cols, status_rows))
+        else:
+            sections.append("Clean working tree.")
+
+        return "\n".join(sections)
+
     return mcp
 
 
@@ -188,21 +310,55 @@ def _register_tool(
     )
     is_text = macro_name in _TEXT_FORMAT
 
+    # Determine truncation config for this macro
+    if macro_name in _MAX_LINES:
+        limit_param = "max_lines"
+        default_limit = _MAX_LINES[macro_name]
+    elif macro_name in _MAX_ROWS:
+        limit_param = "max_results"
+        default_limit = _MAX_ROWS[macro_name]
+    else:
+        limit_param = None
+        default_limit = 0
+
+    range_params = _RANGE_PARAMS.get(macro_name, set())
+
     # Build the tool function dynamically
     # FastMCP uses the function signature for parameter schema
     async def tool_fn(**kwargs) -> str:
         # Apply smart defaults for None params
         kwargs = apply_defaults(defaults, macro_name, kwargs)
-        # Remove remaining None values (optional params not provided)
-        filtered = {k: v for k, v in kwargs.items() if v is not None}
-        # Convert string numbers to int for known numeric params only.
-        # Blanket isdigit() would break git SHAs like "1234567".
-        for k, v in filtered.items():
+
+        # Extract truncation parameter before passing to SQL macro
+        max_rows = default_limit
+        if limit_param and limit_param in kwargs:
+            val = kwargs.pop(limit_param)
+            if val is not None:
+                try:
+                    max_rows = int(val)
+                except (TypeError, ValueError):
+                    pass  # keep default_limit
+
+        # Skip truncation if user provided a range-narrowing parameter
+        if range_params and any(kwargs.get(p) is not None for p in range_params):
+            max_rows = 0
+
+        # Remove None values; coerce known numeric params to int.
+        # Only _NUMERIC_PARAMS are coerced — blanket isdigit() would
+        # break git SHAs like "1234567".
+        filtered = {}
+        for k, v in kwargs.items():
+            if v is None:
+                continue
             if k in _NUMERIC_PARAMS and isinstance(v, str) and v.isdigit():
                 filtered[k] = int(v)
+            else:
+                filtered[k] = v
+
         macro = getattr(con, macro_name)
         try:
             rel = macro(**filtered)
+            cols = rel.columns
             rows = rel.fetchall()
         except Exception as e:
             # DuckDB raises IOException (sitting_duck) or
@@ -215,27 +371,39 @@ def _register_tool(
         if not rows:
             return "(no results)"
 
-        cols = rel.columns
+        # Apply truncation
+        omission = None
+        if limit_param and max_rows > 0:
+            rows, omission = _truncate_rows(rows, max_rows, macro_name)
+
         if is_text:
             # Plain text output
             if len(cols) == 1:
-                return "\n".join(str(r[0]) for r in rows)
-            # Line-oriented: line_number + content → cat -n style
-            if "line_number" in cols and "content" in cols:
+                lines = [str(r[0]) for r in rows]
+            elif "line_number" in cols and "content" in cols:
+                # Line-oriented: line_number + content → cat -n style
                 ln_idx = cols.index("line_number")
                 ct_idx = cols.index("content")
-                return "\n".join(
-                    f"{r[ln_idx]:4d}  {r[ct_idx]}" for r in rows
-                )
-            # Generic multi-column text
-            lines = []
-            for row in rows:
-                parts = [str(v) for v in row if v is not None]
-                lines.append("  ".join(parts))
+                lines = [f"{r[ln_idx]:4d}  {r[ct_idx]}" for r in rows]
+            else:
+                # Generic multi-column text
+                lines = []
+                for row in rows:
+                    parts = [str(v) for v in row if v is not None]
+                    lines.append("  ".join(parts))
+            if omission:
+                lines.insert(_HEAD_TAIL, omission)
             return "\n".join(lines)
         else:
             # Markdown table
-            return _format_markdown_table(cols, rows)
+            result = _format_markdown_table(cols, rows)
+            if omission:
+                # Insert omission after header (2 lines) + head rows
+                md_lines = result.split("\n")
+                insert_at = 2 + _HEAD_TAIL  # header + separator + head rows
+                md_lines.insert(insert_at, omission)
+                result = "\n".join(md_lines)
+            return result
 
     # Set function metadata for FastMCP
     tool_fn.__name__ = macro_name
@@ -246,6 +414,8 @@ def _register_tool(
     annotations = {}
     for p in params:
         annotations[p] = Optional[str]
+    if limit_param:
+        annotations[limit_param] = Optional[int]
     tool_fn.__annotations__ = {**annotations, "return": str}
 
     # Create proper signature with Optional[str] defaults
@@ -258,6 +428,13 @@ def _register_tool(
         )
         for p in params
     ]
+    if limit_param:
+        sig_params.append(inspect.Parameter(
+            limit_param,
+            inspect.Parameter.KEYWORD_ONLY,
+            default=None,
+            annotation=Optional[int],
+        ))
     tool_fn.__signature__ = inspect.Signature(
         sig_params,
         return_annotation=str,
