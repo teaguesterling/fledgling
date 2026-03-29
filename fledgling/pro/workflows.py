@@ -73,15 +73,16 @@ def _table(con, macro_name, kwargs, max_rows=0):
     return _format_markdown_table(cols, rows)
 
 
-def _sorted_table(con, macro_name, kwargs, col_index, max_rows, descending=True):
-    """Call a macro, sort by column, truncate, and format as markdown table."""
+def _sorted_table(con, macro_name, kwargs, sort_col, max_rows, descending=True):
+    """Call a macro, sort by column name, truncate, and format as markdown table."""
     from fledgling.pro.server import _format_markdown_table
     rel = getattr(con, macro_name)(**kwargs)
     cols = rel.columns
     rows = rel.fetchall()
     if not rows:
         return ""
-    rows.sort(key=lambda r: r[col_index] or 0, reverse=descending)
+    col_idx = cols.index(sort_col)
+    rows.sort(key=lambda r: r[col_idx] or 0, reverse=descending)
     if max_rows > 0:
         rows = rows[:max_rows]
     return _format_markdown_table(cols, rows)
@@ -92,6 +93,10 @@ def _sorted_table(con, macro_name, kwargs, col_index, max_rows, descending=True)
 
 def explore(con, defaults, path=None):
     """First-contact codebase briefing."""
+    # Scope patterns to path if provided
+    code_pattern = f"{path}/**/{defaults.code_pattern.split('/')[-1]}" if path else defaults.code_pattern
+    doc_pattern = f"{path}/**/*.md" if path else defaults.doc_pattern
+
     sections = []
 
     sections.append(_section("Languages", lambda: _table(
@@ -100,14 +105,14 @@ def explore(con, defaults, path=None):
 
     sections.append(_section("Key Definitions (top 20 by complexity)", lambda: _sorted_table(
         con, "code_structure",
-        {"file_pattern": defaults.code_pattern},
-        col_index=8,  # cyclomatic_complexity
+        {"file_pattern": code_pattern},
+        sort_col="cyclomatic_complexity",
         max_rows=20,
     )))
 
     sections.append(_section("Documentation", lambda: _table(
         con, "doc_outline",
-        {"file_pattern": defaults.doc_pattern},
+        {"file_pattern": doc_pattern},
         max_rows=15,
     )))
 
@@ -115,7 +120,8 @@ def explore(con, defaults, path=None):
         con, "recent_changes", {"n": 5},
     )))
 
-    return _format_briefing("Explore", sections)
+    title = f"Project: {path}" if path else "Explore"
+    return _format_briefing(title, sections)
 
 
 def investigate(con, defaults, name, file_pattern=None):
@@ -175,7 +181,9 @@ def investigate(con, defaults, name, file_pattern=None):
         max_rows=15,
     )))
 
-    # 4. What this function calls (find_in_ast filtered to function's line range)
+    # 4. What this function calls — fetches all calls then filters to the
+    # function's line range in Python. No SQL-level narrowing is possible
+    # since we need calls *made by* the function, not calls *to* it.
     def _calls():
         rel = con.find_in_ast(
             file_pattern=file_pattern, kind="calls",
