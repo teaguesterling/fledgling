@@ -29,6 +29,7 @@ from fledgling.connection import Connection
 from fledgling.pro.defaults import (
     ProjectDefaults, apply_defaults, infer_defaults, load_config,
 )
+from fledgling.pro.workflows import register_workflows
 
 
 # ── Tool descriptions for known macros ───────────────────────────────
@@ -292,6 +293,9 @@ def create_server(
             sections.append("Clean working tree.")
 
         return "\n".join(sections)
+
+    # Register compound workflow tools
+    register_workflows(mcp, con, defaults)
 
     return mcp
 
