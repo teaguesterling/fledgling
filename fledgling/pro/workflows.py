@@ -11,6 +11,8 @@ import inspect
 import logging
 from typing import Optional, TYPE_CHECKING
 
+from fledgling.pro.formatting import _format_markdown_table, _truncate_rows
+
 if TYPE_CHECKING:
     from fledgling.connection import Connection
     from fledgling.pro.defaults import ProjectDefaults
@@ -58,7 +60,6 @@ def _has_module(con, module_name: str) -> bool:
 
 def _table(con, macro_name, kwargs, max_rows=0):
     """Call a macro and format as a markdown table with optional truncation."""
-    from fledgling.pro.server import _format_markdown_table, _truncate_rows
     rel = getattr(con, macro_name)(**kwargs)
     cols = rel.columns
     rows = rel.fetchall()
@@ -75,7 +76,6 @@ def _table(con, macro_name, kwargs, max_rows=0):
 
 def _sorted_table(con, macro_name, kwargs, sort_col, max_rows, descending=True):
     """Call a macro, sort by column name, truncate, and format as markdown table."""
-    from fledgling.pro.server import _format_markdown_table
     rel = getattr(con, macro_name)(**kwargs)
     cols = rel.columns
     rows = rel.fetchall()
@@ -126,7 +126,6 @@ def explore(con, defaults, path=None):
 
 def investigate(con, defaults, name, file_pattern=None):
     """Deep dive on a specific function or symbol."""
-    from fledgling.pro.server import _format_markdown_table
     file_pattern = file_pattern or defaults.code_pattern
 
     # 1. Find definitions matching the name
@@ -181,24 +180,21 @@ def investigate(con, defaults, name, file_pattern=None):
         max_rows=15,
     )))
 
-    # 4. What this function calls — fetches all calls then filters to the
-    # function's line range in Python. No SQL-level narrowing is possible
-    # since we need calls *made by* the function, not calls *to* it.
+    # 4. What this function calls — scoped to the definition's file
+    # to avoid scanning the entire codebase, then filtered to the
+    # function's line range since we need calls *made by* it.
     def _calls():
         rel = con.find_in_ast(
-            file_pattern=file_pattern, kind="calls",
+            file_pattern=def_file, kind="calls",
         )
         rows = rel.fetchall()
         if not rows:
             return ""
         cols = rel.columns
-        fp_i = cols.index("file_path")
         sl_i = cols.index("start_line")
-        # Filter to lines within the function's range and file
         filtered = [
             r for r in rows
-            if r[fp_i] == def_file
-            and start_line <= r[sl_i] <= end_line
+            if start_line <= r[sl_i] <= end_line
         ]
         if not filtered:
             return ""
@@ -211,7 +207,6 @@ def investigate(con, defaults, name, file_pattern=None):
 
 def review(con, defaults, from_rev=None, to_rev=None, file_pattern=None):
     """Code review prep for a revision range."""
-    from fledgling.pro.server import _format_markdown_table
     from_rev = from_rev or defaults.from_rev
     to_rev = to_rev or defaults.to_rev
     file_pattern = file_pattern or defaults.code_pattern
@@ -230,7 +225,6 @@ def review(con, defaults, from_rev=None, to_rev=None, file_pattern=None):
         change_rows = rows
         if not rows:
             return ""
-        from fledgling.pro.server import _truncate_rows
         rows_display, omission = _truncate_rows(rows, 25, "file_changes")
         result = _format_markdown_table(cols, rows_display)
         if omission:
@@ -335,92 +329,78 @@ def search(con, defaults, query, file_pattern=None):
 # ── Registration ───────────────────────────────────────────────────
 
 
-def register_workflows(mcp, con, defaults):
-    """Register compound workflow tools on the FastMCP server."""
+def _add_workflow_tool(mcp, name, doc, fn, params):
+    """Register an async workflow tool with proper FastMCP metadata.
 
-    async def explore_tool(*, path: Optional[str] = None) -> str:
-        return explore(con, defaults, path=path)
-
-    explore_tool.__name__ = "explore"
-    explore_tool.__qualname__ = "explore"
-    explore_tool.__doc__ = "First-contact codebase briefing: languages, key definitions, docs, recent activity."
-    explore_tool.__annotations__ = {"path": Optional[str], "return": str}
-    explore_tool.__signature__ = inspect.Signature(
-        [inspect.Parameter("path", inspect.Parameter.KEYWORD_ONLY,
-                           default=None, annotation=Optional[str])],
-        return_annotation=str,
-    )
-    mcp.add_tool(explore_tool)
-
-    async def investigate_tool(
-        *, name: str, file_pattern: Optional[str] = None,
-    ) -> str:
-        return investigate(con, defaults, name=name, file_pattern=file_pattern)
-
-    investigate_tool.__name__ = "investigate"
-    investigate_tool.__qualname__ = "investigate"
-    investigate_tool.__doc__ = "Deep dive on a function or symbol: definition, source, callers, callees."
-    investigate_tool.__annotations__ = {
-        "name": str, "file_pattern": Optional[str], "return": str,
+    Args:
+        mcp: FastMCP server instance.
+        name: Tool name.
+        doc: Tool description.
+        fn: Async callable implementing the tool.
+        params: List of (name, annotation, default) tuples. Use
+                inspect.Parameter.empty for required params.
+    """
+    fn.__name__ = name
+    fn.__qualname__ = name
+    fn.__doc__ = doc
+    fn.__annotations__ = {
+        p: ann for p, ann, _ in params
     }
-    investigate_tool.__signature__ = inspect.Signature(
+    fn.__annotations__["return"] = str
+    fn.__signature__ = inspect.Signature(
         [
-            inspect.Parameter("name", inspect.Parameter.KEYWORD_ONLY,
-                              annotation=str),
-            inspect.Parameter("file_pattern", inspect.Parameter.KEYWORD_ONLY,
-                              default=None, annotation=Optional[str]),
+            inspect.Parameter(
+                p, inspect.Parameter.KEYWORD_ONLY,
+                default=default, annotation=ann,
+            )
+            for p, ann, default in params
         ],
         return_annotation=str,
     )
-    mcp.add_tool(investigate_tool)
+    mcp.add_tool(fn)
 
-    async def review_tool(
-        *,
-        from_rev: Optional[str] = None,
-        to_rev: Optional[str] = None,
-        file_pattern: Optional[str] = None,
-    ) -> str:
+
+def register_workflows(mcp, con, defaults):
+    """Register compound workflow tools on the FastMCP server."""
+    _empty = inspect.Parameter.empty
+
+    async def explore_tool(*, path=None):
+        return explore(con, defaults, path=path)
+
+    _add_workflow_tool(mcp, "explore",
+        "First-contact codebase briefing: languages, key definitions, docs, recent activity.",
+        explore_tool, [
+            ("path", Optional[str], None),
+        ])
+
+    async def investigate_tool(*, name, file_pattern=None):
+        return investigate(con, defaults, name=name, file_pattern=file_pattern)
+
+    _add_workflow_tool(mcp, "investigate",
+        "Deep dive on a function or symbol: definition, source, callers, callees.",
+        investigate_tool, [
+            ("name", str, _empty),
+            ("file_pattern", Optional[str], None),
+        ])
+
+    async def review_tool(*, from_rev=None, to_rev=None, file_pattern=None):
         return review(con, defaults, from_rev=from_rev, to_rev=to_rev,
                        file_pattern=file_pattern)
 
-    review_tool.__name__ = "review"
-    review_tool.__qualname__ = "review"
-    review_tool.__doc__ = "Code review prep: changed files, changed functions by complexity, diffs for top changed files."
-    review_tool.__annotations__ = {
-        "from_rev": Optional[str], "to_rev": Optional[str],
-        "file_pattern": Optional[str], "return": str,
-    }
-    review_tool.__signature__ = inspect.Signature(
-        [
-            inspect.Parameter("from_rev", inspect.Parameter.KEYWORD_ONLY,
-                              default=None, annotation=Optional[str]),
-            inspect.Parameter("to_rev", inspect.Parameter.KEYWORD_ONLY,
-                              default=None, annotation=Optional[str]),
-            inspect.Parameter("file_pattern", inspect.Parameter.KEYWORD_ONLY,
-                              default=None, annotation=Optional[str]),
-        ],
-        return_annotation=str,
-    )
-    mcp.add_tool(review_tool)
+    _add_workflow_tool(mcp, "review",
+        "Code review prep: changed files, changed functions by complexity, diffs for top changed files.",
+        review_tool, [
+            ("from_rev", Optional[str], None),
+            ("to_rev", Optional[str], None),
+            ("file_pattern", Optional[str], None),
+        ])
 
-    async def search_tool(
-        *, query: str, file_pattern: Optional[str] = None,
-    ) -> str:
+    async def search_tool(*, query, file_pattern=None):
         return search(con, defaults, query=query, file_pattern=file_pattern)
 
-    search_tool.__name__ = "search"
-    search_tool.__qualname__ = "search"
-    search_tool.__doc__ = "Multi-source search across definitions, call sites, documentation, and conversations."
-    search_tool.__annotations__ = {
-        "query": str, "file_pattern": Optional[str], "return": str,
-    }
-    search_tool.__signature__ = inspect.Signature(
-        [
-            inspect.Parameter("query", inspect.Parameter.KEYWORD_ONLY,
-                              annotation=str),
-            inspect.Parameter("file_pattern", inspect.Parameter.KEYWORD_ONLY,
-                              default=None, annotation=Optional[str]),
-        ],
-        return_annotation=str,
-    )
-    mcp.add_tool(search_tool)
+    _add_workflow_tool(mcp, "search",
+        "Multi-source search across definitions, call sites, documentation, and conversations.",
+        search_tool, [
+            ("query", str, _empty),
+            ("file_pattern", Optional[str], None),
+        ])
