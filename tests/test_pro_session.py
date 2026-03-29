@@ -59,3 +59,67 @@ class TestAccessLog:
         summary = log.summary()
         assert summary["total_calls"] == 3
         assert summary["cached_calls"] == 1
+
+
+from unittest.mock import patch
+
+
+class TestSessionCache:
+    """Session cache stores and retrieves formatted tool output."""
+
+    @pytest.fixture
+    def cache(self):
+        from fledgling.pro.session import SessionCache
+        return SessionCache()
+
+    def test_miss_returns_none(self, cache):
+        assert cache.get("read_source", {"file_path": "foo.py"}) is None
+
+    def test_put_and_get(self, cache):
+        cache.put("read_source", {"file_path": "foo.py"},
+                  text="line 1\nline 2", row_count=2, ttl=300)
+        result = cache.get("read_source", {"file_path": "foo.py"})
+        assert result is not None
+        assert result.text == "line 1\nline 2"
+        assert result.row_count == 2
+
+    def test_different_args_different_entries(self, cache):
+        cache.put("read_source", {"file_path": "a.py"},
+                  text="aaa", row_count=1, ttl=300)
+        cache.put("read_source", {"file_path": "b.py"},
+                  text="bbb", row_count=1, ttl=300)
+        assert cache.get("read_source", {"file_path": "a.py"}).text == "aaa"
+        assert cache.get("read_source", {"file_path": "b.py"}).text == "bbb"
+
+    def test_ttl_expiry(self, cache):
+        cache.put("read_source", {"file_path": "foo.py"},
+                  text="old", row_count=1, ttl=10)
+        with patch("fledgling.pro.session.time") as mock_time:
+            mock_time.time.return_value = time.time() + 11
+            assert cache.get("read_source", {"file_path": "foo.py"}) is None
+
+    def test_ttl_not_expired(self, cache):
+        cache.put("read_source", {"file_path": "foo.py"},
+                  text="fresh", row_count=1, ttl=300)
+        result = cache.get("read_source", {"file_path": "foo.py"})
+        assert result is not None
+        assert result.text == "fresh"
+
+    def test_cache_key_includes_all_args(self, cache):
+        """max_lines affects output, so same tool+path with different limits = different entries."""
+        cache.put("read_source", {"file_path": "foo.py", "max_lines": 50},
+                  text="truncated", row_count=50, ttl=300)
+        cache.put("read_source", {"file_path": "foo.py", "max_lines": 200},
+                  text="full", row_count=200, ttl=300)
+        assert cache.get("read_source", {"file_path": "foo.py", "max_lines": 50}).text == "truncated"
+        assert cache.get("read_source", {"file_path": "foo.py", "max_lines": 200}).text == "full"
+
+    def test_entry_count(self, cache):
+        cache.put("read_source", {"file_path": "a.py"}, "a", 1, 300)
+        cache.put("read_source", {"file_path": "b.py"}, "b", 1, 300)
+        assert cache.entry_count() == 2
+
+    def test_cache_age_seconds(self, cache):
+        cache.put("read_source", {"file_path": "a.py"}, "a", 1, 300)
+        result = cache.get("read_source", {"file_path": "a.py"})
+        assert result.age_seconds() < 1.0

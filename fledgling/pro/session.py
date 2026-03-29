@@ -8,6 +8,68 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass, field
+
+
+@dataclass
+class CachedResult:
+    """A cached tool output with metadata."""
+    text: str
+    row_count: int
+    timestamp: float
+    ttl: float
+    file_mtimes: dict[str, float] = field(default_factory=dict)
+
+    def age_seconds(self) -> float:
+        return time.time() - self.timestamp
+
+    def is_expired(self) -> bool:
+        if self.ttl <= 0:
+            return False  # session lifetime
+        return time.time() - self.timestamp > self.ttl
+
+
+class SessionCache:
+    """In-memory cache for formatted tool output.
+
+    Key: (tool_name, frozen_args). Value: CachedResult.
+    TTL-based expiry with optional file mtime invalidation.
+    """
+
+    def __init__(self):
+        self._entries: dict[tuple, CachedResult] = {}
+
+    @staticmethod
+    def _make_key(tool_name: str, arguments: dict) -> tuple:
+        frozen = tuple(sorted(
+            (k, v) for k, v in arguments.items() if v is not None
+        ))
+        return (tool_name, frozen)
+
+    def get(self, tool_name: str, arguments: dict) -> CachedResult | None:
+        key = self._make_key(tool_name, arguments)
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        if entry.is_expired():
+            del self._entries[key]
+            return None
+        return entry
+
+    def put(self, tool_name: str, arguments: dict,
+            text: str, row_count: int, ttl: float,
+            file_mtimes: dict[str, float] | None = None) -> None:
+        key = self._make_key(tool_name, arguments)
+        self._entries[key] = CachedResult(
+            text=text,
+            row_count=row_count,
+            timestamp=time.time(),
+            ttl=ttl,
+            file_mtimes=file_mtimes or {},
+        )
+
+    def entry_count(self) -> int:
+        return len(self._entries)
 
 
 class AccessLog:
