@@ -142,10 +142,13 @@ def mcp():
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache(mcp):
-    """Clear session cache between tests so truncation tests see fresh results."""
-    if hasattr(mcp, "_session_cache"):
-        mcp._session_cache._entries.clear()
+def _clear_cache(request):
+    """Clear session cache between integration tests to avoid stale results."""
+    yield
+    if "mcp" in request.fixturenames:
+        mcp = request.getfixturevalue("mcp")
+        if hasattr(mcp, "_session_cache"):
+            mcp._session_cache._entries.clear()
 
 
 @pytest.fixture(scope="module")
