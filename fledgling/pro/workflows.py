@@ -94,7 +94,7 @@ def _sorted_table(con, macro_name, kwargs, sort_col, max_rows, descending=True):
 def explore(con, defaults, path=None):
     """First-contact codebase briefing."""
     # Scope patterns to path if provided
-    code_pattern = f"{path}/**/{defaults.code_pattern.split('/')[-1]}" if path else defaults.code_pattern
+    code_pattern = defaults.scoped_code_pattern(path) if path else defaults.code_pattern
     doc_pattern = f"{path}/**/*.md" if path else defaults.doc_pattern
 
     sections = []

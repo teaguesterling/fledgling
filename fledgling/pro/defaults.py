@@ -31,6 +31,11 @@ class ProjectDefaults:
     to_rev: str = "HEAD"
     languages: list[str] = field(default_factory=list)
 
+    def scoped_code_pattern(self, path: str) -> str:
+        """Scope the code pattern to a subdirectory path."""
+        filename_glob = self.code_pattern.split("/")[-1]
+        return f"{path}/**/{filename_glob}"
+
 
 def apply_defaults(
     defaults: ProjectDefaults,
