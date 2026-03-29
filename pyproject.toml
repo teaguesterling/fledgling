@@ -50,6 +50,7 @@ packages = ["fledgling"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [dependency-groups]
 test = [

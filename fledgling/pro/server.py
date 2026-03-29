@@ -26,6 +26,9 @@ from typing import Optional
 
 import fledgling
 from fledgling.connection import Connection
+from fledgling.pro.defaults import (
+    ProjectDefaults, apply_defaults, infer_defaults, load_config,
+)
 
 
 # ── Tool descriptions for known macros ───────────────────────────────
@@ -97,6 +100,13 @@ _TEXT_FORMAT = {
     "find_in_ast", "read_doc_section", "help",
 }
 
+# Params that should be coerced from string to int.
+# MCP sends all values as strings; only these are genuinely numeric.
+_NUMERIC_PARAMS = {
+    "n", "max_lvl", "ctx", "center_line", "lim", "start_line", "end_line",
+    "context_lines", "limit",
+}
+
 # ── Token-aware truncation ──────────────────────────────────────────
 # Default row limits by tool.  0 = no limit.
 
@@ -162,7 +172,6 @@ def _truncate_rows(rows, max_rows, macro_name):
         msg += f"\n{hint}"
     return head + tail, msg
 
-
 def _format_markdown_table(cols: list[str], rows: list[tuple]) -> str:
     """Format query results as a markdown table."""
     # Calculate column widths
@@ -210,6 +219,12 @@ def create_server(
     con = fledgling.connect(init=init, root=root, modules=modules, profile=profile)
     mcp = FastMCP(name)
 
+    # Infer smart defaults, merge with config file overrides
+    project_root = root or os.getcwd()
+    overrides = load_config(project_root)
+    defaults = infer_defaults(con, overrides=overrides, root=project_root)
+    mcp._defaults = defaults
+
     # Register each macro as an MCP tool
     for macro_info in con._tools.list():
         macro_name = macro_info["name"]
@@ -218,7 +233,7 @@ def create_server(
         if macro_name in _SKIP:
             continue
 
-        _register_tool(mcp, con, macro_name, params)
+        _register_tool(mcp, con, macro_name, params, defaults)
 
     # ── MCP Resources ───────────────────────────────────────────────
     # Static/slow-changing context available without tool calls.
@@ -286,6 +301,7 @@ def _register_tool(
     con: Connection,
     macro_name: str,
     params: list[str],
+    defaults: ProjectDefaults,
 ):
     """Register a single macro as an MCP tool."""
     description = _DESCRIPTIONS.get(
@@ -310,6 +326,9 @@ def _register_tool(
     # Build the tool function dynamically
     # FastMCP uses the function signature for parameter schema
     async def tool_fn(**kwargs) -> str:
+        # Apply smart defaults for None params
+        kwargs = apply_defaults(defaults, macro_name, kwargs)
+
         # Extract truncation parameter before passing to SQL macro
         max_rows = default_limit
         if limit_param and limit_param in kwargs:
@@ -324,17 +343,31 @@ def _register_tool(
         if range_params and any(kwargs.get(p) is not None for p in range_params):
             max_rows = 0
 
-        # Remove None values; coerce digit strings to int
-        filtered = {
-            k: (int(v) if isinstance(v, str) and v.isdigit() else v)
-            for k, v in kwargs.items()
-            if v is not None
-        }
-        macro = getattr(con, macro_name)
-        rel = macro(**filtered)
+        # Remove None values; coerce known numeric params to int.
+        # Only _NUMERIC_PARAMS are coerced — blanket isdigit() would
+        # break git SHAs like "1234567".
+        filtered = {}
+        for k, v in kwargs.items():
+            if v is None:
+                continue
+            if k in _NUMERIC_PARAMS and isinstance(v, str) and v.isdigit():
+                filtered[k] = int(v)
+            else:
+                filtered[k] = v
 
-        cols = rel.columns
-        rows = rel.fetchall()
+        macro = getattr(con, macro_name)
+        try:
+            rel = macro(**filtered)
+            cols = rel.columns
+            rows = rel.fetchall()
+        except Exception as e:
+            # DuckDB raises IOException (sitting_duck) or
+            # InvalidInputException (markdown) for globs matching
+            # zero files. Treat as empty results.
+            etype = type(e).__name__
+            if etype in ("IOException", "InvalidInputException"):
+                return "(no results)"
+            raise
         if not rows:
             return "(no results)"
 
