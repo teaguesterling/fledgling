@@ -16,6 +16,7 @@ RESOURCE_URIS = [
     "fledgling://diagnostics",
     "fledgling://docs",
     "fledgling://git",
+    "fledgling://session",
 ]
 
 
@@ -52,7 +53,7 @@ class TestResourceDiscovery:
             assert expected in uris, f"{expected} not in {uris}"
 
     def test_resource_count(self, resource_list):
-        assert len(resource_list) == 4
+        assert len(resource_list) == 5
 
 
 def _read_resource(mcp, uri):
@@ -180,3 +181,10 @@ class TestResourcesWorkWithoutToolCalls:
         for uri in RESOURCE_URIS:
             text = _read_resource(fresh_mcp, uri)
             assert len(text) > 0, f"{uri} returned empty on fresh server"
+
+    def test_fresh_session_resource_well_formed(self):
+        """Session resource shows zero-state summary on fresh server."""
+        fresh_mcp = create_server(init=False)
+        text = _read_resource(fresh_mcp, "fledgling://session")
+        assert "0 tool calls" in text
+        assert "0 cached" in text

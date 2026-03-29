@@ -141,6 +141,16 @@ def mcp():
     return create_server(root=PROJECT_ROOT, init=False)
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache(request):
+    """Clear session cache between integration tests to avoid stale results."""
+    yield
+    if "mcp" in request.fixturenames:
+        mcp = request.getfixturevalue("mcp")
+        if hasattr(mcp, "session_cache"):
+            mcp.session_cache._entries.clear()
+
+
 @pytest.fixture(scope="module")
 def tools(mcp):
     """Tool dict keyed by name, fetched once."""

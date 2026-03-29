@@ -29,6 +29,8 @@ from fledgling.connection import Connection
 from fledgling.pro.defaults import (
     ProjectDefaults, apply_defaults, infer_defaults, load_config,
 )
+import time as _time
+
 from fledgling.pro.formatting import (
     _format_markdown_table,
     _truncate_rows,
@@ -38,6 +40,7 @@ from fledgling.pro.formatting import (
     _MAX_ROWS,
 )
 from fledgling.pro.prompts import register_prompts
+from fledgling.pro.session import AccessLog, SessionCache
 from fledgling.pro.workflows import register_workflows
 
 
@@ -125,6 +128,21 @@ _RANGE_PARAMS = {
     "doc_outline": {"search"},
 }
 
+# ── Session cache policy ───────────────────────────────────────────
+# Tools listed here cache their results. TTL in seconds; 0 = session lifetime.
+
+CACHE_POLICY: dict[str, dict] = {
+    "project_overview": {"ttl": 0},
+    "find_definitions": {"ttl": 300},
+    "code_structure":   {"ttl": 300},
+    "read_source":      {"ttl": 300, "mtime_params": ("file_path",)},
+    "read_context":     {"ttl": 300, "mtime_params": ("file_path",)},
+    "doc_outline":      {"ttl": 0},
+    "recent_changes":   {"ttl": 30},
+    "working_tree_status": {"ttl": 10},
+}
+
+
 
 def create_server(
     name: str = "fledgling",
@@ -156,6 +174,11 @@ def create_server(
     defaults = infer_defaults(con, overrides=overrides, root=project_root)
     mcp._defaults = defaults
 
+    cache = SessionCache()
+    access_log = AccessLog(con._con)
+    mcp.session_cache = cache
+    mcp.access_log = access_log
+
     # Register each macro as an MCP tool
     for macro_info in con._tools.list():
         macro_name = macro_info["name"]
@@ -164,7 +187,7 @@ def create_server(
         if macro_name in _SKIP:
             continue
 
-        _register_tool(mcp, con, macro_name, params, defaults)
+        _register_tool(mcp, con, macro_name, params, defaults, cache, access_log)
 
     # ── MCP Resources ───────────────────────────────────────────────
     # Static/slow-changing context available without tool calls.
@@ -224,6 +247,42 @@ def create_server(
 
         return "\n".join(sections)
 
+    @mcp.resource("fledgling://session",
+                  name="session",
+                  description="Session access log — tool call history, cache stats.")
+    def session_resource() -> str:
+        summary = access_log.summary()
+        total = summary["total_calls"]
+        cached = summary["cached_calls"]
+        pct = int(100 * cached / total) if total > 0 else 0
+        entries = cache.entry_count()
+
+        sections = []
+        sections.append(
+            f"Session: {total} tool calls, {cached} cached ({pct}%)\n"
+            f"Cache: {entries} entries"
+        )
+
+        # Recent calls table
+        recent = access_log.recent_calls(20)
+
+        if recent:
+            sections.append("\n## Recent Calls\n")
+            cols = ["#", "tool", "args", "rows", "cached", "ms"]
+            rows = []
+            for r in recent:
+                args_str = str(r[2])
+                if len(args_str) > 60:
+                    args_str = args_str[:57] + "..."
+                rows.append((
+                    r[0], r[1], args_str, r[3],
+                    "yes" if r[4] else "no",
+                    f"{r[5]:.0f}",
+                ))
+            sections.append(_format_markdown_table(cols, rows))
+
+        return "\n".join(sections)
+
     # Register compound workflow tools
     register_workflows(mcp, con, defaults)
 
@@ -234,11 +293,13 @@ def create_server(
 
 
 def _register_tool(
-    mcp: FastMCP,
+    mcp,  # FastMCP type annotation removed to avoid import at module level
     con: Connection,
     macro_name: str,
     params: list[str],
     defaults: ProjectDefaults,
+    cache: SessionCache,
+    access_log: AccessLog,
 ):
     """Register a single macro as an MCP tool."""
     description = _DESCRIPTIONS.get(
@@ -263,6 +324,8 @@ def _register_tool(
     # Build the tool function dynamically
     # FastMCP uses the function signature for parameter schema
     async def tool_fn(**kwargs) -> str:
+        t0 = _time.time()
+
         # Apply smart defaults for None params
         kwargs = apply_defaults(defaults, macro_name, kwargs)
 
@@ -292,55 +355,94 @@ def _register_tool(
             else:
                 filtered[k] = v
 
+        # Build cache args (include limit param since it affects output)
+        cache_args = dict(filtered)
+        if limit_param and max_rows != default_limit:
+            cache_args[limit_param] = max_rows
+
+        # Check cache
+        policy = CACHE_POLICY.get(macro_name)
+        if policy is not None:
+            cached = cache.get(macro_name, cache_args)
+            if cached is not None:
+                elapsed = (_time.time() - t0) * 1000
+                access_log.record(macro_name, cache_args, cached.row_count,
+                                  cached=True, elapsed_ms=elapsed)
+                age = int(cached.age_seconds())
+                return f"(cached — same as {age}s ago)\n{cached.text}"
+
+        # Call macro
         macro = getattr(con, macro_name)
         try:
             rel = macro(**filtered)
             cols = rel.columns
             rows = rel.fetchall()
         except Exception as e:
-            # DuckDB raises IOException (sitting_duck) or
-            # InvalidInputException (markdown) for globs matching
-            # zero files. Treat as empty results.
             etype = type(e).__name__
             if etype in ("IOException", "InvalidInputException"):
+                elapsed = (_time.time() - t0) * 1000
+                access_log.record(macro_name, cache_args, 0,
+                                  cached=False, elapsed_ms=elapsed)
                 return "(no results)"
             raise
         if not rows:
+            elapsed = (_time.time() - t0) * 1000
+            access_log.record(macro_name, cache_args, 0,
+                              cached=False, elapsed_ms=elapsed)
             return "(no results)"
+
+        total_rows = len(rows)
 
         # Apply truncation
         omission = None
         if limit_param and max_rows > 0:
             rows, omission = _truncate_rows(rows, max_rows, macro_name)
+        displayed_rows = len(rows)
 
+        # Format output
         if is_text:
-            # Plain text output
             if len(cols) == 1:
                 lines = [str(r[0]) for r in rows]
             elif "line_number" in cols and "content" in cols:
-                # Line-oriented: line_number + content → cat -n style
                 ln_idx = cols.index("line_number")
                 ct_idx = cols.index("content")
                 lines = [f"{r[ln_idx]:4d}  {r[ct_idx]}" for r in rows]
             else:
-                # Generic multi-column text
                 lines = []
                 for row in rows:
                     parts = [str(v) for v in row if v is not None]
                     lines.append("  ".join(parts))
             if omission:
                 lines.insert(_HEAD_TAIL, omission)
-            return "\n".join(lines)
+            text = "\n".join(lines)
         else:
-            # Markdown table
-            result = _format_markdown_table(cols, rows)
+            text = _format_markdown_table(cols, rows)
             if omission:
-                # Insert omission after header (2 lines) + head rows
-                md_lines = result.split("\n")
-                insert_at = 2 + _HEAD_TAIL  # header + separator + head rows
+                md_lines = text.split("\n")
+                insert_at = 2 + _HEAD_TAIL
                 md_lines.insert(insert_at, omission)
-                result = "\n".join(md_lines)
-            return result
+                text = "\n".join(md_lines)
+
+        elapsed = (_time.time() - t0) * 1000
+
+        # Store in cache
+        if policy is not None:
+            file_mtimes = {}
+            for p in policy.get("mtime_params", ()):
+                path = filtered.get(p)
+                if path:
+                    try:
+                        file_mtimes[path] = os.path.getmtime(path)
+                    except OSError:
+                        pass
+            cache.put(macro_name, cache_args, text, displayed_rows,
+                      ttl=policy["ttl"], file_mtimes=file_mtimes)
+
+        # Log access
+        access_log.record(macro_name, cache_args, displayed_rows,
+                          cached=False, elapsed_ms=elapsed)
+
+        return text
 
     # Set function metadata for FastMCP
     tool_fn.__name__ = macro_name
