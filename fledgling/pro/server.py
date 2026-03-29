@@ -20,6 +20,7 @@ Usage::
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Optional
 
@@ -242,14 +243,12 @@ def _register_tool(
     tool_fn.__doc__ = description
 
     # Build parameter annotations for FastMCP schema generation
-    import typing
     annotations = {}
     for p in params:
         annotations[p] = Optional[str]
     tool_fn.__annotations__ = {**annotations, "return": str}
 
     # Create proper signature with Optional[str] defaults
-    import inspect
     sig_params = [
         inspect.Parameter(
             p,
