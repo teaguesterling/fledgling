@@ -7,6 +7,7 @@ redundant computation within a session.
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass, field
 
@@ -54,7 +55,21 @@ class SessionCache:
         if entry.is_expired():
             del self._entries[key]
             return None
+        if entry.file_mtimes and not self._files_unchanged(entry.file_mtimes):
+            del self._entries[key]
+            return None
         return entry
+
+    @staticmethod
+    def _files_unchanged(file_mtimes: dict[str, float]) -> bool:
+        """Check whether all tracked files still have their cached mtime."""
+        for path, cached_mtime in file_mtimes.items():
+            try:
+                if os.path.getmtime(path) != cached_mtime:
+                    return False
+            except OSError:
+                return False  # file deleted or inaccessible
+        return True
 
     def put(self, tool_name: str, arguments: dict,
             text: str, row_count: int, ttl: float,

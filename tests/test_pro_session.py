@@ -123,3 +123,57 @@ class TestSessionCache:
         cache.put("read_source", {"file_path": "a.py"}, "a", 1, 300)
         result = cache.get("read_source", {"file_path": "a.py"})
         assert result.age_seconds() < 1.0
+
+
+import os
+
+
+class TestCacheMtimeInvalidation:
+    """Cache entries for single-file tools invalidate on file modification."""
+
+    @pytest.fixture
+    def cache(self):
+        from fledgling.pro.session import SessionCache
+        return SessionCache()
+
+    def test_valid_when_file_unchanged(self, cache, tmp_path):
+        f = tmp_path / "test.py"
+        f.write_text("original")
+        mtime = os.path.getmtime(str(f))
+        cache.put("read_source", {"file_path": str(f)},
+                  text="original", row_count=1, ttl=300,
+                  file_mtimes={str(f): mtime})
+        result = cache.get("read_source", {"file_path": str(f)})
+        assert result is not None
+        assert result.text == "original"
+
+    def test_invalidated_when_file_modified(self, cache, tmp_path):
+        f = tmp_path / "test.py"
+        f.write_text("original")
+        mtime = os.path.getmtime(str(f))
+        cache.put("read_source", {"file_path": str(f)},
+                  text="original", row_count=1, ttl=300,
+                  file_mtimes={str(f): mtime})
+        # Modify the file
+        time.sleep(0.05)  # ensure mtime changes
+        f.write_text("modified")
+        result = cache.get("read_source", {"file_path": str(f)})
+        assert result is None
+
+    def test_no_mtimes_skips_check(self, cache):
+        """Glob-pattern tools have no file_mtimes — TTL only."""
+        cache.put("find_definitions", {"file_pattern": "**/*.py"},
+                  text="results", row_count=10, ttl=300)
+        result = cache.get("find_definitions", {"file_pattern": "**/*.py"})
+        assert result is not None
+
+    def test_missing_file_invalidates(self, cache, tmp_path):
+        f = tmp_path / "gone.py"
+        f.write_text("exists")
+        mtime = os.path.getmtime(str(f))
+        cache.put("read_source", {"file_path": str(f)},
+                  text="exists", row_count=1, ttl=300,
+                  file_mtimes={str(f): mtime})
+        f.unlink()
+        result = cache.get("read_source", {"file_path": str(f)})
+        assert result is None
