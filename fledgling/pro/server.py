@@ -313,6 +313,45 @@ def create_server(
 
         return "\n".join(sections)
 
+    @mcp.resource("fledgling://session",
+                  name="session",
+                  description="Session access log — tool call history, cache stats.")
+    def session_resource() -> str:
+        summary = access_log.summary()
+        total = summary["total_calls"]
+        cached = summary["cached_calls"]
+        pct = int(100 * cached / total) if total > 0 else 0
+        entries = cache.entry_count()
+
+        sections = []
+        sections.append(
+            f"Session: {total} tool calls, {cached} cached ({pct}%)\n"
+            f"Cache: {entries} entries"
+        )
+
+        # Recent calls table
+        recent = con._con.execute("""
+            SELECT call_id, tool_name, arguments, result_rows, cached, elapsed_ms
+            FROM session_access_log
+            ORDER BY call_id DESC
+            LIMIT 20
+        """).fetchall()
+
+        if recent:
+            sections.append("\n## Recent Calls\n")
+            cols = ["#", "tool", "args", "rows", "cached", "ms"]
+            rows = []
+            for r in recent:
+                args_str = r[2] if len(str(r[2])) < 60 else str(r[2])[:57] + "..."
+                rows.append((
+                    r[0], r[1], args_str, r[3],
+                    "yes" if r[4] else "no",
+                    f"{r[5]:.0f}",
+                ))
+            sections.append(_format_markdown_table(cols, rows))
+
+        return "\n".join(sections)
+
     return mcp
 
 

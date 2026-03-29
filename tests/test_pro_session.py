@@ -240,3 +240,129 @@ class TestServerCacheIntegration:
         r1 = _text(await mcp.call_tool("help", {}))
         r2 = _text(await mcp.call_tool("help", {}))
         assert "(cached" not in r2
+
+
+@requires_fastmcp
+class TestServerAccessLogIntegration:
+    """Access log records calls made through the server."""
+
+    @pytest.fixture
+    def mcp_with_log(self):
+        """Fresh server per test so log is clean."""
+        from fledgling.pro.server import create_server
+        return create_server(root=PROJECT_ROOT, init=False)
+
+    @pytest.mark.anyio
+    async def test_tool_call_logged(self, mcp_with_log):
+        mcp = mcp_with_log
+        await mcp.call_tool("project_overview", {})
+        summary = mcp._access_log.summary()
+        assert summary["total_calls"] >= 1
+
+    @pytest.mark.anyio
+    async def test_cached_call_logged_as_cached(self, mcp_with_log):
+        mcp = mcp_with_log
+        await mcp.call_tool("project_overview", {})
+        await mcp.call_tool("project_overview", {})
+        summary = mcp._access_log.summary()
+        assert summary["total_calls"] >= 2
+        assert summary["cached_calls"] >= 1
+
+    @pytest.mark.anyio
+    async def test_no_results_still_logged(self, mcp_with_log):
+        mcp = mcp_with_log
+        await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/nonexistent_file_xyz.py",
+        })
+        summary = mcp._access_log.summary()
+        assert summary["total_calls"] >= 1
+
+
+import asyncio
+
+
+@requires_fastmcp
+class TestSessionResource:
+    """fledgling://session exposes access log summary."""
+
+    @pytest.fixture(scope="class")
+    def mcp(self):
+        from fledgling.pro.server import create_server
+        return create_server(root=PROJECT_ROOT, init=False)
+
+    def test_resource_listed(self, mcp):
+        if HAS_FASTMCP:
+            from fastmcp import Client
+
+        async def _list():
+            async with Client(mcp) as client:
+                return await client.list_resources()
+
+        loop = asyncio.new_event_loop()
+        try:
+            resources = loop.run_until_complete(_list())
+        finally:
+            loop.close()
+        uris = [str(r.uri) for r in resources]
+        assert "fledgling://session" in uris
+
+    def test_resource_returns_content(self, mcp):
+        if HAS_FASTMCP:
+            from fastmcp import Client
+
+        async def _call_tool():
+            await mcp.call_tool("project_overview", {})
+
+        async def _read():
+            async with Client(mcp) as client:
+                result = await client.read_resource("fledgling://session")
+                return result[0].text
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_call_tool())
+            text = loop.run_until_complete(_read())
+        finally:
+            loop.close()
+        assert "tool calls" in text.lower() or "calls" in text.lower()
+
+    def test_resource_shows_cache_stats(self, mcp):
+        if HAS_FASTMCP:
+            from fastmcp import Client
+
+        async def _calls():
+            await mcp.call_tool("project_overview", {})
+            await mcp.call_tool("project_overview", {})
+
+        async def _read():
+            async with Client(mcp) as client:
+                result = await client.read_resource("fledgling://session")
+                return result[0].text
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_calls())
+            text = loop.run_until_complete(_read())
+        finally:
+            loop.close()
+        assert "cache" in text.lower()
+
+    def test_resource_shows_recent_calls(self, mcp):
+        if HAS_FASTMCP:
+            from fastmcp import Client
+
+        async def _call_tool():
+            await mcp.call_tool("project_overview", {})
+
+        async def _read():
+            async with Client(mcp) as client:
+                result = await client.read_resource("fledgling://session")
+                return result[0].text
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_call_tool())
+            text = loop.run_until_complete(_read())
+        finally:
+            loop.close()
+        assert "project_overview" in text
