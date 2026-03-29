@@ -12,6 +12,9 @@ import time
 from dataclasses import dataclass, field
 
 
+SESSION_LIFETIME = 0  # TTL value meaning "never expires within this session"
+
+
 @dataclass
 class CachedResult:
     """A cached tool output with metadata."""
@@ -26,7 +29,7 @@ class CachedResult:
 
     def is_expired(self) -> bool:
         if self.ttl <= 0:
-            return False  # session lifetime
+            return False  # SESSION_LIFETIME: never expires
         return time.time() - self.timestamp > self.ttl
 
 
@@ -35,6 +38,10 @@ class SessionCache:
 
     Key: (tool_name, frozen_args). Value: CachedResult.
     TTL-based expiry with optional file mtime invalidation.
+
+    Cache keys strip None values, so ``{"a": 1}`` and ``{"a": 1, "b": None}``
+    are treated as the same key. This matches the server pipeline which filters
+    Nones before building cache_args.
     """
 
     def __init__(self):
@@ -42,8 +49,14 @@ class SessionCache:
 
     @staticmethod
     def _make_key(tool_name: str, arguments: dict) -> tuple:
+        def _freeze(v):
+            """Make a value hashable for use as a cache key."""
+            if isinstance(v, (str, int, float, bool, type(None))):
+                return v
+            return json.dumps(v, sort_keys=True)
+
         frozen = tuple(sorted(
-            (k, v) for k, v in arguments.items() if v is not None
+            (k, _freeze(v)) for k, v in arguments.items() if v is not None
         ))
         return (tool_name, frozen)
 
@@ -130,3 +143,11 @@ class AccessLog:
             FROM session_access_log
         """).fetchone()
         return {"total_calls": row[0], "cached_calls": row[1]}
+
+    def recent_calls(self, limit: int = 20) -> list[tuple]:
+        """Return the most recent tool calls, newest first."""
+        return self._con.execute(
+            "SELECT call_id, tool_name, arguments, result_rows, cached, elapsed_ms "
+            "FROM session_access_log ORDER BY call_id DESC LIMIT ?",
+            [limit],
+        ).fetchall()

@@ -73,6 +73,15 @@ class TestAccessLog:
         assert summary["total_calls"] == 3
         assert summary["cached_calls"] == 1
 
+    def test_recent_calls(self, log):
+        log.record("read_source", {"file_path": "a.py"}, 5, False, 10.0)
+        log.record("find_definitions", {"file_pattern": "**/*.py"}, 20, False, 50.0)
+        recent = log.recent_calls(limit=10)
+        assert len(recent) == 2
+        # Newest first
+        assert recent[0][1] == "find_definitions"
+        assert recent[1][1] == "read_source"
+
 
 from unittest.mock import patch
 
@@ -107,8 +116,7 @@ class TestSessionCache:
     def test_ttl_expiry(self, cache):
         cache.put("read_source", {"file_path": "foo.py"},
                   text="old", row_count=1, ttl=10)
-        with patch("fledgling.pro.session.time") as mock_time:
-            mock_time.time.return_value = time.time() + 11
+        with patch("fledgling.pro.session.time.time", return_value=time.time() + 11):
             assert cache.get("read_source", {"file_path": "foo.py"}) is None
 
     def test_ttl_not_expired(self, cache):
@@ -136,6 +144,22 @@ class TestSessionCache:
         cache.put("read_source", {"file_path": "a.py"}, "a", 1, 300)
         result = cache.get("read_source", {"file_path": "a.py"})
         assert result.age_seconds() < 1.0
+
+    def test_unhashable_args_handled(self, cache):
+        """List/dict values in args are serialized to JSON for the cache key."""
+        cache.put("custom_tool", {"tags": ["a", "b"]},
+                  text="result", row_count=1, ttl=300)
+        result = cache.get("custom_tool", {"tags": ["a", "b"]})
+        assert result is not None
+        assert result.text == "result"
+
+    def test_none_args_stripped_from_key(self, cache):
+        """None values are stripped: {a: 1} and {a: 1, b: None} share a key."""
+        cache.put("read_source", {"file_path": "a.py"},
+                  text="cached", row_count=1, ttl=300)
+        result = cache.get("read_source", {"file_path": "a.py", "lines": None})
+        assert result is not None
+        assert result.text == "cached"
 
 
 import os

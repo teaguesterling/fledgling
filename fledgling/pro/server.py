@@ -29,6 +29,8 @@ from fledgling.connection import Connection
 from fledgling.pro.defaults import (
     ProjectDefaults, apply_defaults, infer_defaults, load_config,
 )
+import time as _time
+
 from fledgling.pro.session import AccessLog, SessionCache
 
 
@@ -330,19 +332,16 @@ def create_server(
         )
 
         # Recent calls table
-        recent = con._con.execute("""
-            SELECT call_id, tool_name, arguments, result_rows, cached, elapsed_ms
-            FROM session_access_log
-            ORDER BY call_id DESC
-            LIMIT 20
-        """).fetchall()
+        recent = access_log.recent_calls(20)
 
         if recent:
             sections.append("\n## Recent Calls\n")
             cols = ["#", "tool", "args", "rows", "cached", "ms"]
             rows = []
             for r in recent:
-                args_str = r[2] if len(str(r[2])) < 60 else str(r[2])[:57] + "..."
+                args_str = str(r[2])
+                if len(args_str) > 60:
+                    args_str = args_str[:57] + "..."
                 rows.append((
                     r[0], r[1], args_str, r[3],
                     "yes" if r[4] else "no",
@@ -387,7 +386,6 @@ def _register_tool(
     # Build the tool function dynamically
     # FastMCP uses the function signature for parameter schema
     async def tool_fn(**kwargs) -> str:
-        import time as _time
         t0 = _time.time()
 
         # Apply smart defaults for None params
@@ -430,7 +428,7 @@ def _register_tool(
             cached = cache.get(macro_name, cache_args)
             if cached is not None:
                 elapsed = (_time.time() - t0) * 1000
-                access_log.record(macro_name, filtered, cached.row_count,
+                access_log.record(macro_name, cache_args, cached.row_count,
                                   cached=True, elapsed_ms=elapsed)
                 age = int(cached.age_seconds())
                 return f"(cached — same as {age}s ago)\n{cached.text}"
@@ -445,7 +443,7 @@ def _register_tool(
             etype = type(e).__name__
             if etype in ("IOException", "InvalidInputException"):
                 elapsed = (_time.time() - t0) * 1000
-                access_log.record(macro_name, filtered, 0,
+                access_log.record(macro_name, cache_args, 0,
                                   cached=False, elapsed_ms=elapsed)
                 return "(no results)"
             raise
@@ -502,7 +500,7 @@ def _register_tool(
                       ttl=policy["ttl"], file_mtimes=file_mtimes)
 
         # Log access
-        access_log.record(macro_name, filtered, row_count,
+        access_log.record(macro_name, cache_args, row_count,
                           cached=False, elapsed_ms=elapsed)
 
         return text
