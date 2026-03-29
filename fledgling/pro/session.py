@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
 
 
 class AccessLog:
@@ -20,7 +19,6 @@ class AccessLog:
 
     def __init__(self, con):
         self._con = con
-        self._next_id = 1
         con.execute("""
             CREATE TABLE IF NOT EXISTS session_access_log (
                 call_id     INTEGER PRIMARY KEY,
@@ -32,6 +30,8 @@ class AccessLog:
                 elapsed_ms  DOUBLE
             )
         """)
+        row = con.execute("SELECT COALESCE(MAX(call_id), 0) FROM session_access_log").fetchone()
+        self._next_id = row[0] + 1
 
     def record(self, tool_name: str, arguments: dict,
                row_count: int, cached: bool, elapsed_ms: float) -> int:

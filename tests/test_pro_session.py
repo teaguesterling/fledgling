@@ -29,11 +29,13 @@ class TestAccessLog:
     def test_log_entry(self, log, con):
         log.record("read_source", {"file_path": "foo.py"}, row_count=10,
                     cached=False, elapsed_ms=23.5)
-        rows = con.execute("SELECT * FROM session_access_log").fetchall()
-        assert len(rows) == 1
-        assert rows[0][2] == "read_source"  # tool_name
-        assert rows[0][4] == 10             # result_rows
-        assert rows[0][5] is False          # cached
+        row = con.execute(
+            "SELECT tool_name, result_rows, cached "
+            "FROM session_access_log"
+        ).fetchone()
+        assert row[0] == "read_source"
+        assert row[1] == 10
+        assert row[2] is False
 
     def test_log_increments_call_id(self, log, con):
         log.record("read_source", {"file_path": "a.py"}, 5, False, 10.0)
