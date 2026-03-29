@@ -101,6 +101,13 @@ _TEXT_FORMAT = {
     "read_doc_section", "help",
 }
 
+# Params that should be coerced from string to int.
+# MCP sends all values as strings; only these are genuinely numeric.
+_NUMERIC_PARAMS = {
+    "n", "max_lvl", "ctx", "center_line", "lim", "start_line", "end_line",
+    "context_lines", "limit",
+}
+
 
 def _format_markdown_table(cols: list[str], rows: list[tuple]) -> str:
     """Format query results as a markdown table."""
@@ -150,7 +157,7 @@ def create_server(
     # Infer smart defaults, merge with config file overrides
     project_root = root or os.getcwd()
     overrides = load_config(project_root)
-    defaults = infer_defaults(con, overrides=overrides)
+    defaults = infer_defaults(con, overrides=overrides, root=project_root)
     mcp._defaults = defaults
 
     # Register each macro as an MCP tool
@@ -187,9 +194,10 @@ def _register_tool(
         kwargs = apply_defaults(defaults, macro_name, kwargs)
         # Remove remaining None values (optional params not provided)
         filtered = {k: v for k, v in kwargs.items() if v is not None}
-        # Convert string numbers to int where needed
+        # Convert string numbers to int for known numeric params only.
+        # Blanket isdigit() would break git SHAs like "1234567".
         for k, v in filtered.items():
-            if isinstance(v, str) and v.isdigit():
+            if k in _NUMERIC_PARAMS and isinstance(v, str) and v.isdigit():
                 filtered[k] = int(v)
         macro = getattr(con, macro_name)
         try:

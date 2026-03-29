@@ -7,10 +7,14 @@ from the project at server startup. Users can override via
 
 from __future__ import annotations
 
+import logging
+import subprocess
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fledgling.connection import Connection
@@ -125,19 +129,39 @@ def _find_doc_dir(con: Connection) -> str | None:
             if rows:
                 return d
         except Exception:
+            log.debug("doc dir probe failed for %s", d, exc_info=True)
             continue
     return None
+
+
+def _infer_main_branch(root: str | Path) -> str:
+    """Detect the default branch from git remote HEAD."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
+            capture_output=True, text=True, cwd=str(root), timeout=5,
+        )
+        if result.returncode == 0:
+            # Output is "origin/main" or "origin/master" — strip prefix
+            branch = result.stdout.strip().removeprefix("origin/")
+            if branch:
+                return branch
+    except Exception:
+        log.debug("git main branch detection failed", exc_info=True)
+    return "main"
 
 
 def infer_defaults(
     con: Connection,
     overrides: dict[str, str] | None = None,
+    root: str | Path | None = None,
 ) -> ProjectDefaults:
     """Analyze the project and build smart defaults.
 
     Args:
         con: A fledgling Connection to the project.
         overrides: Values from config file that override inference.
+        root: Project root for git operations. Defaults to cwd.
 
     Returns:
         ProjectDefaults with inferred + overridden values.
@@ -163,16 +187,20 @@ def infer_defaults(
                     code_pattern = _code_glob(LANGUAGE_EXTENSIONS[lang])
                     break
     except Exception:
-        pass
+        log.debug("project_overview inference failed", exc_info=True)
 
     # ── Doc pattern ─────────────────────────────────────────────
     doc_dir = _find_doc_dir(con)
     doc_pattern = f"{doc_dir}/**/*.md" if doc_dir else "**/*.md"
 
+    # ── Main branch ─────────────────────────────────────────────
+    main_branch = _infer_main_branch(root or ".")
+
     # ── Build defaults, apply overrides ─────────────────────────
     defaults = ProjectDefaults(
         code_pattern=code_pattern,
         doc_pattern=doc_pattern,
+        main_branch=main_branch,
         languages=languages,
     )
 

@@ -187,33 +187,36 @@ class TestInferDefaults:
 
     def test_code_pattern_is_python(self, con):
         """This repo is primarily Python, so code_pattern should be **/*.py."""
-        defaults = infer_defaults(con)
+        defaults = infer_defaults(con, root=str(PROJECT_ROOT))
         assert "py" in defaults.code_pattern
 
     def test_languages_includes_python(self, con):
-        defaults = infer_defaults(con)
+        defaults = infer_defaults(con, root=str(PROJECT_ROOT))
         assert "Python" in defaults.languages
 
     def test_doc_pattern_finds_docs_dir(self, con):
         """This repo has a docs/ directory."""
-        defaults = infer_defaults(con)
+        defaults = infer_defaults(con, root=str(PROJECT_ROOT))
         assert defaults.doc_pattern.startswith("docs/")
 
-    def test_main_branch_is_string(self, con):
-        defaults = infer_defaults(con)
+    def test_main_branch_inferred(self, con):
+        """main_branch is inferred from git, not just hardcoded."""
+        defaults = infer_defaults(con, root=str(PROJECT_ROOT))
         assert isinstance(defaults.main_branch, str)
         assert len(defaults.main_branch) > 0
+        # This repo uses 'main'
+        assert defaults.main_branch == "main"
 
     def test_config_overrides_inferred(self, con):
         """load_config values override inferred values."""
         overrides = {"code_pattern": "custom/**/*.rs", "main_branch": "develop"}
-        defaults = infer_defaults(con, overrides=overrides)
+        defaults = infer_defaults(con, overrides=overrides, root=str(PROJECT_ROOT))
         assert defaults.code_pattern == "custom/**/*.rs"
         assert defaults.main_branch == "develop"
 
     def test_empty_overrides_no_effect(self, con):
-        d1 = infer_defaults(con)
-        d2 = infer_defaults(con, overrides={})
+        d1 = infer_defaults(con, root=str(PROJECT_ROOT))
+        d2 = infer_defaults(con, overrides={}, root=str(PROJECT_ROOT))
         assert d1 == d2
 
 
@@ -264,8 +267,9 @@ class TestToolCallDefaults:
         """find_definitions with no file_pattern uses inferred default."""
         result = self._call(server, "find_definitions", {})
         assert result != "(no results)"
-        # Should find Python definitions (this is a Python project)
-        assert "def" in result.lower() or "class" in result.lower() or "|" in result
+        # Should find Python definitions (this is a Python project).
+        # find_definitions returns markdown table with name/kind columns.
+        assert "function" in result.lower() or "class" in result.lower()
 
     def test_find_definitions_explicit_overrides(self, server):
         """Explicit pattern overrides the default."""
