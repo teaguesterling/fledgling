@@ -37,6 +37,7 @@ from fledgling.pro.formatting import (
     _MAX_LINES,
     _MAX_ROWS,
 )
+from fledgling.pro.prompts import register_prompts
 from fledgling.pro.workflows import register_workflows
 
 
@@ -225,6 +226,9 @@ def create_server(
 
     # Register compound workflow tools
     register_workflows(mcp, con, defaults)
+
+    # Register MCP prompt templates
+    register_prompts(mcp, con, defaults)
 
     return mcp
 
