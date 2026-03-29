@@ -1,6 +1,6 @@
 # P4-002: Smart Defaults — Project-Aware Tool Configuration
 
-## Status: Ready
+## Status: Done
 
 ## Problem
 

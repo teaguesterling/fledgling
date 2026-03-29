@@ -366,6 +366,7 @@ class TestGitDiffFile:
         lines = [l for l in text.strip().split("\n") if l.strip()]
         assert len(lines) > 0
 
+    @pytest.mark.xfail(reason="Flaky — depends on recent commits touching the file")
     def test_shows_additions_and_removals(self, mcp_server):
         text = call_tool(mcp_server, "GitDiffFile", {
             "file": "sql/code.sql",

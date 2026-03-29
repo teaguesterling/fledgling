@@ -1,6 +1,6 @@
 # P4-003: Token-Aware Output — Truncation, Pagination, Budgets
 
-## Status: Ready
+## Status: Done
 
 ## Problem
 

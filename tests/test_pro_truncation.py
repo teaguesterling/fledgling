@@ -4,6 +4,7 @@ Tests the truncation logic in fledgling.pro.server: head/tail display,
 omission messages, max_lines/max_results parameters, and range-param bypass.
 """
 
+import asyncio
 import os
 import pytest
 
@@ -140,96 +141,89 @@ def mcp():
     return create_server(root=PROJECT_ROOT, init=False)
 
 
+@pytest.fixture(scope="module")
+def tools(mcp):
+    """Tool dict keyed by name, fetched once."""
+    loop = asyncio.new_event_loop()
+    tool_list = loop.run_until_complete(mcp.list_tools())
+    loop.close()
+    return {t.name: t for t in tool_list}
+
+
+def _text(result) -> str:
+    """Extract text from a FastMCP ToolResult."""
+    return result.content[0].text
+
+
 @requires_fastmcp
 class TestToolRegistration:
     """Verify truncation parameters appear in tool schemas."""
 
-    def test_read_source_has_max_lines(self, mcp):
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        tool = tools["read_source"]
-        param_names = list(tool.parameters.keys())
+    def test_read_source_has_max_lines(self, tools):
+        param_names = list(tools["read_source"].parameters.get("properties", {}).keys())
         assert "max_lines" in param_names
 
-    def test_find_definitions_has_max_results(self, mcp):
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        tool = tools["find_definitions"]
-        param_names = list(tool.parameters.keys())
+    def test_find_definitions_has_max_results(self, tools):
+        param_names = list(tools["find_definitions"].parameters.get("properties", {}).keys())
         assert "max_results" in param_names
 
-    def test_help_has_no_truncation_param(self, mcp):
+    def test_help_has_no_truncation_param(self, tools):
         """Tools not in _MAX_LINES or _MAX_ROWS get no truncation param."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        tool = tools["help"]
-        param_names = list(tool.parameters.keys())
+        param_names = list(tools["help"].parameters.get("properties", {}).keys())
         assert "max_lines" not in param_names
         assert "max_results" not in param_names
 
 
 @requires_fastmcp
 class TestTextTruncation:
-    """Test truncation of text-format tools."""
+    """Test truncation of text-format tools via mcp.call_tool."""
 
     @pytest.mark.anyio
     async def test_read_source_truncates_large_file(self, mcp):
-        """A file larger than 200 lines gets truncated."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        # conftest.py is well over 200 lines
-        result = await fn(file_path=f"{PROJECT_ROOT}/tests/conftest.py")
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+        }))
         assert "--- omitted" in result
         assert _HINTS["read_source"] in result
 
     @pytest.mark.anyio
     async def test_read_source_small_file_no_truncation(self, mcp):
-        """A small file comes through untruncated."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(file_path=f"{PROJECT_ROOT}/fledgling/pro/__main__.py")
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/fledgling/pro/__main__.py",
+        }))
         assert "--- omitted" not in result
 
     @pytest.mark.anyio
     async def test_read_source_max_lines_zero_disables(self, mcp):
-        """max_lines=0 disables truncation."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(
-            file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            max_lines=0,
-        )
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "max_lines": 0,
+        }))
         assert "--- omitted" not in result
 
     @pytest.mark.anyio
     async def test_read_source_explicit_lines_bypasses(self, mcp):
-        """Explicit lines param skips truncation."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(
-            file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            lines="1-10",
-        )
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "lines": "1-10",
+        }))
         assert "--- omitted" not in result
         assert "(no results)" not in result
 
     @pytest.mark.anyio
     async def test_read_source_match_bypasses(self, mcp):
-        """Explicit match param skips truncation."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(
-            file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            match="def ",
-        )
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "match": "def ",
+        }))
         assert "--- omitted" not in result
 
     @pytest.mark.anyio
     async def test_read_source_custom_max_lines(self, mcp):
-        """Custom max_lines is respected."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(
-            file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            max_lines=20,
-        )
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "max_lines": 20,
+        }))
         assert "--- omitted" in result
         lines = result.strip().split("\n")
         # 5 head + omission msg + hint + 5 tail = 12 lines
@@ -237,15 +231,11 @@ class TestTextTruncation:
 
     @pytest.mark.anyio
     async def test_truncated_text_has_head_and_tail(self, mcp):
-        """Truncated output starts with line 1 and ends with the last line."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["read_source"].fn
-        result = await fn(
-            file_path=f"{PROJECT_ROOT}/tests/conftest.py",
-            max_lines=20,
-        )
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "max_lines": 20,
+        }))
         lines = result.strip().split("\n")
-        # First line should be line 1 of the file
         assert lines[0].strip().startswith("1")
 
 
@@ -255,51 +245,38 @@ class TestMarkdownTruncation:
 
     @pytest.mark.anyio
     async def test_find_definitions_truncates(self, mcp):
-        """find_definitions with a small limit truncates."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["find_definitions"].fn
-        result = await fn(
-            file_pattern=f"{PROJECT_ROOT}/**/*.py",
-            max_results=15,
-        )
+        result = _text(await mcp.call_tool("find_definitions", {
+            "file_pattern": f"{PROJECT_ROOT}/**/*.py",
+            "max_results": 15,
+        }))
         assert "--- omitted" in result
         assert _HINTS["find_definitions"] in result
 
     @pytest.mark.anyio
     async def test_find_definitions_name_pattern_bypasses(self, mcp):
-        """Explicit name_pattern skips truncation."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["find_definitions"].fn
-        result = await fn(
-            file_pattern=f"{PROJECT_ROOT}/**/*.py",
-            name_pattern="load%",
-        )
+        result = _text(await mcp.call_tool("find_definitions", {
+            "file_pattern": f"{PROJECT_ROOT}/**/*.py",
+            "name_pattern": "load%",
+        }))
         assert "--- omitted" not in result
 
     @pytest.mark.anyio
     async def test_list_files_truncates(self, mcp):
-        """list_files with a small limit truncates."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["list_files"].fn
-        result = await fn(
-            glob_pattern=f"{PROJECT_ROOT}/**/*",
-            max_results=15,
-        )
+        result = _text(await mcp.call_tool("list_files", {
+            "pattern": f"{PROJECT_ROOT}/**/*",
+            "max_results": 15,
+        }))
         assert "--- omitted" in result
         assert _HINTS["list_files"] in result
 
     @pytest.mark.anyio
     async def test_markdown_omission_position(self, mcp):
-        """Omission message appears after header + head rows in markdown."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["list_files"].fn
-        result = await fn(
-            glob_pattern=f"{PROJECT_ROOT}/**/*",
-            max_results=15,
-        )
+        result = _text(await mcp.call_tool("list_files", {
+            "pattern": f"{PROJECT_ROOT}/**/*",
+            "max_results": 15,
+        }))
         assert "--- omitted" in result
         lines = result.strip().split("\n")
-        # Header line, separator line, 5 head rows, omission, hint, 5 tail rows
         omission_idx = next(
             i for i, l in enumerate(lines) if "--- omitted" in l
         )
@@ -307,8 +284,7 @@ class TestMarkdownTruncation:
 
     @pytest.mark.anyio
     async def test_max_results_zero_disables(self, mcp):
-        """max_results=0 disables truncation for discovery tools."""
-        tools = {t.name: t for t in mcp._tool_manager.list_tools()}
-        fn = tools["recent_changes"].fn
-        result = await fn(max_results=0)
+        result = _text(await mcp.call_tool("recent_changes", {
+            "max_results": 0,
+        }))
         assert "--- omitted" not in result
