@@ -141,6 +141,13 @@ def mcp():
     return create_server(root=PROJECT_ROOT, init=False)
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache(mcp):
+    """Clear session cache between tests so truncation tests see fresh results."""
+    if hasattr(mcp, "_session_cache"):
+        mcp._session_cache._entries.clear()
+
+
 @pytest.fixture(scope="module")
 def tools(mcp):
     """Tool dict keyed by name, fetched once."""

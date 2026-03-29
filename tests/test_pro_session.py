@@ -1,8 +1,21 @@
 """Tests for fledgling-pro session state: caching and access logging."""
 
+import os
 import time
 import pytest
 import duckdb
+
+try:
+    import fastmcp  # noqa: F401
+    HAS_FASTMCP = True
+except ImportError:
+    HAS_FASTMCP = False
+
+requires_fastmcp = pytest.mark.skipif(
+    not HAS_FASTMCP, reason="fastmcp not installed"
+)
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class TestAccessLog:
@@ -177,3 +190,53 @@ class TestCacheMtimeInvalidation:
         f.unlink()
         result = cache.get("read_source", {"file_path": str(f)})
         assert result is None
+
+
+def _text(result) -> str:
+    """Extract text from a FastMCP ToolResult."""
+    return result.content[0].text
+
+
+@requires_fastmcp
+class TestServerCacheIntegration:
+    """Cache and access log are wired into the server tool pipeline."""
+
+    @pytest.fixture(scope="class")
+    def mcp(self):
+        from fledgling.pro.server import create_server
+        return create_server(root=PROJECT_ROOT, init=False)
+
+    @pytest.mark.anyio
+    async def test_repeated_call_returns_cached(self, mcp):
+        result1 = _text(await mcp.call_tool("project_overview", {}))
+        result2 = _text(await mcp.call_tool("project_overview", {}))
+        assert "(cached" in result2
+        # The actual content should still be present
+        assert "python" in result2.lower() or "sql" in result2.lower()
+
+    @pytest.mark.anyio
+    async def test_cached_note_shows_age(self, mcp):
+        # First call primes the cache
+        await mcp.call_tool("project_overview", {})
+        result = _text(await mcp.call_tool("project_overview", {}))
+        # Should contain "(cached — same as Ns ago)" with some number
+        assert "(cached" in result
+        assert "ago)" in result
+
+    @pytest.mark.anyio
+    async def test_different_args_not_cached(self, mcp):
+        r1 = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/fledgling/pro/__init__.py",
+        }))
+        r2 = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/fledgling/__init__.py",
+        }))
+        assert "(cached" not in r1
+        assert "(cached" not in r2
+
+    @pytest.mark.anyio
+    async def test_uncacheable_tool_never_cached(self, mcp):
+        """Tools not in CACHE_POLICY are never cached."""
+        r1 = _text(await mcp.call_tool("help", {}))
+        r2 = _text(await mcp.call_tool("help", {}))
+        assert "(cached" not in r2
