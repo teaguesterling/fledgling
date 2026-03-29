@@ -175,8 +175,8 @@ def create_server(
 
     cache = SessionCache()
     access_log = AccessLog(con._con)
-    mcp._session_cache = cache
-    mcp._access_log = access_log
+    mcp.session_cache = cache
+    mcp.access_log = access_log
 
     # Register each macro as an MCP tool
     for macro_info in con._tools.list():
@@ -383,16 +383,17 @@ def _register_tool(
             raise
         if not rows:
             elapsed = (_time.time() - t0) * 1000
-            access_log.record(macro_name, filtered, 0,
+            access_log.record(macro_name, cache_args, 0,
                               cached=False, elapsed_ms=elapsed)
             return "(no results)"
 
-        row_count = len(rows)
+        total_rows = len(rows)
 
         # Apply truncation
         omission = None
         if limit_param and max_rows > 0:
             rows, omission = _truncate_rows(rows, max_rows, macro_name)
+        displayed_rows = len(rows)
 
         # Format output
         if is_text:
@@ -430,11 +431,11 @@ def _register_tool(
                         file_mtimes[path] = os.path.getmtime(path)
                     except OSError:
                         pass
-            cache.put(macro_name, cache_args, text, row_count,
+            cache.put(macro_name, cache_args, text, displayed_rows,
                       ttl=policy["ttl"], file_mtimes=file_mtimes)
 
         # Log access
-        access_log.record(macro_name, cache_args, row_count,
+        access_log.record(macro_name, cache_args, displayed_rows,
                           cached=False, elapsed_ms=elapsed)
 
         return text

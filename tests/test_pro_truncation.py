@@ -147,8 +147,8 @@ def _clear_cache(request):
     yield
     if "mcp" in request.fixturenames:
         mcp = request.getfixturevalue("mcp")
-        if hasattr(mcp, "_session_cache"):
-            mcp._session_cache._entries.clear()
+        if hasattr(mcp, "session_cache"):
+            mcp.session_cache._entries.clear()
 
 
 @pytest.fixture(scope="module")

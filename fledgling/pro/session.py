@@ -28,8 +28,8 @@ class CachedResult:
         return time.time() - self.timestamp
 
     def is_expired(self) -> bool:
-        if self.ttl <= 0:
-            return False  # SESSION_LIFETIME: never expires
+        if self.ttl == SESSION_LIFETIME:
+            return False
         return time.time() - self.timestamp > self.ttl
 
 
@@ -97,7 +97,19 @@ class SessionCache:
         )
 
     def entry_count(self) -> int:
-        return len(self._entries)
+        """Count of active (non-expired, files unchanged) cache entries."""
+        active = 0
+        stale_keys = []
+        for key, entry in self._entries.items():
+            if entry.is_expired():
+                stale_keys.append(key)
+            elif entry.file_mtimes and not self._files_unchanged(entry.file_mtimes):
+                stale_keys.append(key)
+            else:
+                active += 1
+        for key in stale_keys:
+            del self._entries[key]
+        return active
 
 
 class AccessLog:

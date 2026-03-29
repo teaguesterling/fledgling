@@ -1,9 +1,12 @@
 """Tests for fledgling-pro session state: caching and access logging."""
 
+import asyncio
 import os
 import time
-import pytest
+from unittest.mock import patch
+
 import duckdb
+import pytest
 
 try:
     import fastmcp  # noqa: F401
@@ -83,9 +86,6 @@ class TestAccessLog:
         assert recent[1][1] == "read_source"
 
 
-from unittest.mock import patch
-
-
 class TestSessionCache:
     """Session cache stores and retrieves formatted tool output."""
 
@@ -162,9 +162,6 @@ class TestSessionCache:
         assert result.text == "cached"
 
 
-import os
-
-
 class TestCacheMtimeInvalidation:
     """Cache entries for single-file tools invalidate on file modification."""
 
@@ -230,6 +227,11 @@ class TestServerCacheIntegration:
         from fledgling.pro.server import create_server
         return create_server(root=PROJECT_ROOT, init=False)
 
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self, mcp):
+        """Clear cache between tests to avoid ordering dependencies."""
+        mcp.session_cache._entries.clear()
+
     @pytest.mark.anyio
     async def test_repeated_call_returns_cached(self, mcp):
         result1 = _text(await mcp.call_tool("project_overview", {}))
@@ -280,7 +282,7 @@ class TestServerAccessLogIntegration:
     async def test_tool_call_logged(self, mcp_with_log):
         mcp = mcp_with_log
         await mcp.call_tool("project_overview", {})
-        summary = mcp._access_log.summary()
+        summary = mcp.access_log.summary()
         assert summary["total_calls"] >= 1
 
     @pytest.mark.anyio
@@ -288,7 +290,7 @@ class TestServerAccessLogIntegration:
         mcp = mcp_with_log
         await mcp.call_tool("project_overview", {})
         await mcp.call_tool("project_overview", {})
-        summary = mcp._access_log.summary()
+        summary = mcp.access_log.summary()
         assert summary["total_calls"] >= 2
         assert summary["cached_calls"] >= 1
 
@@ -298,11 +300,17 @@ class TestServerAccessLogIntegration:
         await mcp.call_tool("read_source", {
             "file_path": f"{PROJECT_ROOT}/nonexistent_file_xyz.py",
         })
-        summary = mcp._access_log.summary()
+        summary = mcp.access_log.summary()
         assert summary["total_calls"] >= 1
 
 
-import asyncio
+def _run_async(coro):
+    """Run an async coroutine, avoiding conflicts with pytest-asyncio."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 @requires_fastmcp
@@ -314,6 +322,16 @@ class TestSessionResource:
         from fledgling.pro.server import create_server
         return create_server(root=PROJECT_ROOT, init=False)
 
+    def _read_session(self, mcp):
+        if HAS_FASTMCP:
+            from fastmcp import Client
+
+        async def _read():
+            async with Client(mcp) as client:
+                result = await client.read_resource("fledgling://session")
+                return result[0].text
+        return _run_async(_read())
+
     def test_resource_listed(self, mcp):
         if HAS_FASTMCP:
             from fastmcp import Client
@@ -321,72 +339,22 @@ class TestSessionResource:
         async def _list():
             async with Client(mcp) as client:
                 return await client.list_resources()
-
-        loop = asyncio.new_event_loop()
-        try:
-            resources = loop.run_until_complete(_list())
-        finally:
-            loop.close()
+        resources = _run_async(_list())
         uris = [str(r.uri) for r in resources]
         assert "fledgling://session" in uris
 
     def test_resource_returns_content(self, mcp):
-        if HAS_FASTMCP:
-            from fastmcp import Client
-
-        async def _call_tool():
-            await mcp.call_tool("project_overview", {})
-
-        async def _read():
-            async with Client(mcp) as client:
-                result = await client.read_resource("fledgling://session")
-                return result[0].text
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_call_tool())
-            text = loop.run_until_complete(_read())
-        finally:
-            loop.close()
+        _run_async(mcp.call_tool("project_overview", {}))
+        text = self._read_session(mcp)
         assert "tool calls" in text.lower() or "calls" in text.lower()
 
     def test_resource_shows_cache_stats(self, mcp):
-        if HAS_FASTMCP:
-            from fastmcp import Client
-
-        async def _calls():
-            await mcp.call_tool("project_overview", {})
-            await mcp.call_tool("project_overview", {})
-
-        async def _read():
-            async with Client(mcp) as client:
-                result = await client.read_resource("fledgling://session")
-                return result[0].text
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_calls())
-            text = loop.run_until_complete(_read())
-        finally:
-            loop.close()
+        _run_async(mcp.call_tool("project_overview", {}))
+        _run_async(mcp.call_tool("project_overview", {}))
+        text = self._read_session(mcp)
         assert "cache" in text.lower()
 
     def test_resource_shows_recent_calls(self, mcp):
-        if HAS_FASTMCP:
-            from fastmcp import Client
-
-        async def _call_tool():
-            await mcp.call_tool("project_overview", {})
-
-        async def _read():
-            async with Client(mcp) as client:
-                result = await client.read_resource("fledgling://session")
-                return result[0].text
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_call_tool())
-            text = loop.run_until_complete(_read())
-        finally:
-            loop.close()
+        _run_async(mcp.call_tool("project_overview", {}))
+        text = self._read_session(mcp)
         assert "project_overview" in text
