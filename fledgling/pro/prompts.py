@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _escape_braces(value: str) -> str:
+    """Escape curly braces so user input is safe for str.format()."""
+    return value.replace("{", "{{").replace("}", "}}")
+
+
 # ── Templates ─────────────────────────────────────────────────────
 # Condensed from skills/*.md — actionable steps with {briefing}
 # placeholder for live data and tool suggestions pre-filled with
@@ -166,9 +171,12 @@ def register_prompts(mcp: FastMCP, con: Connection, defaults: ProjectDefaults):
     def explore_prompt(path: str | None = None) -> str:
         scope = f"path: {path}" if path else "the full project"
         code_pattern = (
-            f"{path}/**/{defaults.code_pattern.split('/')[-1]}"
+            defaults.scoped_code_pattern(path)
             if path else defaults.code_pattern
         )
+        # Escape user input for safe str.format() interpolation
+        scope = _escape_braces(scope)
+        code_pattern = _escape_braces(code_pattern)
         try:
             briefing = explore(con, defaults, path=path)
         except Exception:
@@ -196,9 +204,9 @@ def register_prompts(mcp: FastMCP, con: Connection, defaults: ProjectDefaults):
             briefing = f"(Could not find data for '{symptom}'. Use the tools below to search manually.)"
 
         return INVESTIGATE_TEMPLATE.format(
-            symptom=symptom,
+            symptom=_escape_braces(symptom),
             briefing=briefing,
-            code_pattern=code_pattern,
+            code_pattern=_escape_braces(code_pattern),
         )
 
     @mcp.prompt(

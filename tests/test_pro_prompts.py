@@ -55,7 +55,12 @@ def _get_prompt(mcp, name, arguments=None):
         from fastmcp import Client
         async with Client(mcp) as client:
             result = await client.get_prompt(name, arguments or {})
-            return result.messages[0].content.text
+            assert result.messages, f"Prompt {name!r} returned no messages"
+            msg = result.messages[0]
+            assert hasattr(msg.content, "text"), (
+                f"Prompt {name!r} returned non-text content: {type(msg.content)}"
+            )
+            return msg.content.text
     return _run_async(_get())
 
 
@@ -213,7 +218,12 @@ class TestGracefulDegradation:
 
     @pytest.fixture(scope="class")
     def partial_mcp(self):
-        """Server with only source + code modules (no git, no docs)."""
+        """Server with only source + code modules (no git, no docs).
+
+        Uses class scope (not module) to avoid duckdb_mcp global state
+        interference with the module-scoped ``mcp`` fixture — each class
+        gets its own server lifecycle.
+        """
         from fledgling.pro.server import create_server
         return create_server(root=PROJECT_ROOT, init=False,
                              modules=["source", "code"])
