@@ -399,11 +399,34 @@ $ fledgling query <span class="str">"SELECT * FROM sessions() LIMIT 5"</span></d
         <code>chmod +x .fledgling-cli && mv .fledgling-cli ~/.local/bin/fledgling</code>
     </div>
 
+    <h2>Fledgling Pro</h2>
+    <p>A FastMCP server that adds coordination intelligence on top of the SQL macros.</p>
+    <div class="install-box">
+        <code>pip install fledgling[pro]</code>
+    </div>
+    <div class="grid">
+        <div class="card"><strong>Smart Defaults</strong><span>Auto-detects language, doc dir, git branch</span></div>
+        <div class="card"><strong>Token Awareness</strong><span>Auto-truncation with hints and bypass</span></div>
+        <div class="card"><strong>Compound Workflows</strong><span>explore, investigate, review, search in one call</span></div>
+        <div class="card"><strong>Session State</strong><span>Caching, access log, kibitzer suggestions</span></div>
+        <div class="card"><strong>MCP Resources</strong><span>Project context always available</span></div>
+        <div class="card"><strong>Prompt Templates</strong><span>Context-aware exploration and review workflows</span></div>
+    </div>
+
+    <h2>Python API</h2>
+    <div class="example"><span class="kw">import</span> fledgling
+
+con = fledgling.<span class="fn">connect</span>()
+con.<span class="fn">find_definitions</span>(<span class="str">'**/*.py'</span>, name_pattern=<span class="str">'parse%'</span>).<span class="fn">show</span>()
+con.<span class="fn">recent_changes</span>(5).<span class="fn">select</span>(<span class="str">'hash, message'</span>).<span class="fn">df</span>()
+con.<span class="fn">code_structure</span>(<span class="str">'src/**/*.py'</span>).<span class="fn">filter</span>(<span class="str">'cyclomatic_complexity > 5'</span>).<span class="fn">show</span>()</div>
+
     <footer>
         <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
-        MIT License &middot;
+        Apache-2.0 &middot;
         Built on <a href="https://duckdb.org">DuckDB</a> +
-        <a href="https://modelcontextprotocol.io">MCP</a>
+        <a href="https://modelcontextprotocol.io">MCP</a> +
+        <a href="https://gofastmcp.com">FastMCP</a>
     </footer>
 </div>
 <script>

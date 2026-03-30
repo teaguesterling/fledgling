@@ -1,10 +1,25 @@
 # Fledgling
 
-A sandboxed DuckDB runtime for AI coding agents. Structured tools for code, git, docs, and self-analysis — plus access to 140+ DuckDB extensions through SQL.
+MCP tools that help AI agents get their bearings in a codebase — unified SQL views over code, git, docs, and conversations, powered by DuckDB.
+
+**Three ways to run:**
+
+```bash
+# Zero-dependency MCP server (pure DuckDB, no Python)
+curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb
+
+# Python API
+pip install fledgling
+python -c "import fledgling; fledgling.connect().find_definitions('**/*.py').show()"
+
+# FastMCP server with smart defaults, caching, and compound workflows
+pip install fledgling[pro]
+fledgling-pro
+```
 
 ## Before and After
 
-Your agent wastes tokens parsing text. Fledgling gives it purpose-built MCP tools that return structured data.
+Your agent wastes tokens parsing text. Fledgling gives it purpose-built tools that return structured data.
 
 **Find a function definition**
 
@@ -12,140 +27,153 @@ Before — grep returns raw text the agent has to parse:
 ```
 grep -rn 'def parse_config' src/
 src/config.py:42:def parse_config(path: str, strict: bool = False) -> Config:
-src/legacy/config.py:18:def parse_config(raw: dict) -> LegacyConfig:
 ```
 
 After — the agent calls `FindDefinitions`:
 ```
 FindDefinitions(file_pattern="src/**/*.py", name_pattern="parse_config%")
-```
-```
-| file_path            | name         | kind     | start_line | end_line | signature                                                    |
-|----------------------|--------------|----------|------------|----------|--------------------------------------------------------------|
-| src/config.py        | parse_config | function | 42         | 68       | def parse_config(path: str, strict: bool = False) -> Config  |
-| src/legacy/config.py | parse_config | function | 18         | 31       | def parse_config(raw: dict) -> LegacyConfig                  |
-```
 
-No text parsing. The agent gets the file, the line range, the kind, and the full signature in one call across 30 languages.
-
-**Read code with context**
-
-Before — sed and mental arithmetic:
+| file_path     | name         | kind                | start_line | end_line | signature                                   |
+|---------------|--------------|---------------------|------------|----------|---------------------------------------------|
+| src/config.py | parse_config | DEFINITION_FUNCTION | 42         | 68       | def parse_config(path: str, strict: ...) -> |
 ```
-sed -n '37,47p' src/parser.py
-```
-
-After — the agent calls `ReadLines`:
-```
-ReadLines(file_path="src/parser.py", lines="42", ctx="5")
-```
-
-Returns numbered lines centered on line 42 with 5 lines of context. No counting, no off-by-one errors.
 
 **Compose queries across domains**
 
-Before — shell pipelines, string parsing, manual correlation:
-```
-git diff --name-only HEAD~3 HEAD | while read f; do grep -c 'if\|elif\|for\|while' "$f"; done
-```
-
-After — the agent writes one SQL query via the `query` tool:
 ```sql
+-- Functions in recently changed files, ranked by cyclomatic complexity
 SELECT * FROM changed_function_summary('HEAD~3', 'HEAD', 'src/**/*.py')
 ```
 
-Returns functions in recently changed files ranked by cyclomatic complexity. Code analysis + git history in one call.
-
-**Find a markdown section**
-
-Before — read the entire file, scan for the heading:
-```
-cat README.md
-```
-
-After — the agent calls `MDSection`:
-```
-MDSection(file_path="README.md", section_id="installation")
-```
-
-Returns just the matched section. No wasted tokens on the rest of the document.
+Code analysis + git history in one call. No shell pipelines, no string parsing.
 
 ## What's Included
 
-Fledgling publishes 11 MCP tools:
+### MCP Tools (14)
 
-| MCP Tool | What it does |
-|----------|-------------|
-| `ReadLines` | Read file lines with range, context, and filtering — replaces cat/head/tail |
-| `FindDefinitions` | AST-based search for functions, classes, variables across 30 languages |
-| `CodeStructure` | Top-level overview of definitions with line counts |
+| Tool | What it does |
+|------|-------------|
+| `ReadLines` | Read file lines with range, context, and match filtering |
+| `FindDefinitions` | AST-based search for functions/classes across 30 languages |
+| `FindInAST` | Semantic code search: calls, imports, loops, conditionals, strings, comments |
+| `CodeStructure` | Structural overview with cyclomatic complexity metrics |
+| `MDOverview` | Browse all docs with keyword/regex search |
 | `MDSection` | Read a specific markdown section by ID |
 | `GitDiffSummary` | File-level change summary between revisions |
+| `GitDiffFile` | Line-level unified diff |
 | `GitShow` | File content at a specific git revision |
-| `Help` | Skill guide with macro catalog, workflows, and examples |
+| `Help` | Built-in skill guide with workflows and macro catalog |
 | `ChatSessions` | Browse Claude Code conversation sessions |
 | `ChatSearch` | Full-text search across conversation messages |
-| `ChatToolUsage` | Tool usage patterns across sessions |
+| `ChatToolUsage` | Tool usage patterns |
 | `ChatDetail` | Deep view of a single session |
 
-Plus 17 query-only macros available via the SQL `query` tool — `complexity_hotspots`, `function_callers`, `module_dependencies`, `structural_diff`, `list_files`, `doc_outline`, and more. These are composable: join code structure with git history, filter by complexity, correlate across domains.
+Plus 20+ composable SQL macros via the query tool: `complexity_hotspots`, `function_callers`, `module_dependencies`, `structural_diff`, `doc_outline`, and more.
 
-### The quiet part
+### Fledgling Pro (FastMCP)
 
-Fledgling also exposes a general-purpose SQL query tool backed by the full DuckDB engine. This means your agent can query anything DuckDB can read — Parquet, CSV, JSON, and any community extension loaded before sandbox lockdown.
+The `fledgling[pro]` package adds a FastMCP server with:
 
-There are [140+ community extensions](https://duckdb.org/community_extensions/list_of_extensions): Google Sheets, Elasticsearch, HDF5 scientific data, genomics formats, web archives, and more. All accessible through one MCP server, all via SQL.
+- **Smart defaults** — auto-detects your project's language, doc directory, and git branch
+- **Token-aware output** — auto-truncation with hints ("use lines='N-M' to narrow")
+- **Compound workflows** — `explore`, `investigate`, `review`, `search` in one call
+- **MCP resources** — project overview, docs, git state always available without tool calls
+- **Prompt templates** — context-aware exploration, investigation, and review workflows
+- **Session state** — caching, access log, and kibitzer (suggests better tool usage)
 
-The purpose-built tools get your agent productive. The SQL layer is there when it needs to go further.
+### Python API
 
-## How It Works
+```python
+import fledgling
 
-Fledgling is a DuckDB init script. No Python runtime, no Node, no build step. It loads extensions, defines SQL macros, publishes them as MCP tools, locks down the sandbox, and starts an MCP server.
+con = fledgling.connect()
 
-Everything runs read-only inside a filesystem sandbox restricted to your project directory. The agent gets structured access to your code — it can't write files, make network calls, or escape the sandbox.
+# Macros as methods — return composable DuckDB Relations
+con.find_definitions("**/*.py", name_pattern="parse%").show()
+con.recent_changes(5).select("hash, message").df()
+con.code_structure("src/**/*.py").filter("cyclomatic_complexity > 5").show()
 
-## Configuration
-
-Using the launcher (recommended):
-
-```json
-{
-  "mcpServers": {
-    "fledgling": {
-      "command": "/path/to/fledgling/bin/fledgling",
-      "args": ["serve", "--profile", "analyst"],
-      "env": {
-        "FLEDGLING_ROOT": "/path/to/your/project"
-      }
-    }
-  }
-}
+# Module-level for quick scripting
+from fledgling.tools import find_definitions, recent_changes
+find_definitions("**/*.py").show()
 ```
 
-Or invoke DuckDB directly:
+### CLI for Humans
 
 ```bash
-duckdb -init init/init-fledgling.sql
+fledgling find-definitions 'src/**/*.py' '%parse%'
+fledgling recent-changes 10 -c hash,message
+fledgling CodeStructure '**/*.rs' -f csv
+fledgling query "SELECT * FROM complexity_hotspots('**/*.py', 10)"
+fledgling help
+fledgling update   # preserves your module/profile config
 ```
 
-## Status
+Tab completion: `eval "$(fledgling --completions bash)"`
 
-Alpha. 11 MCP tools + 17 query-only macros, all tested.
+## Install
 
-- 223 tests across 6 macro tiers + MCP integration + sandbox + profiles
-- See [docs/vision/PRODUCT_SPEC.md](docs/vision/PRODUCT_SPEC.md) for the full specification
+### Per-project (recommended)
 
-## Requirements
+```bash
+curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb
+```
 
-- [DuckDB](https://duckdb.org/) >= 1.4.4
-- Community extensions are installed automatically
+Creates `.fledgling-init.sql`, `.fledgling-help.md`, and `.mcp.json` in your project root. Customize modules and profile on the [install page](https://teaguesterling.github.io/fledgling/).
+
+### Via pip
+
+```bash
+pip install fledgling          # CLI + Python API
+pip install fledgling[pro]     # + FastMCP server
+```
+
+### Requirements
+
+- [DuckDB](https://duckdb.org/) >= 1.5.0 (CLI for MCP server, Python package for API)
+- Community extensions installed automatically
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│  fledgling-pro (FastMCP)                │  pip install fledgling[pro]
+│  Smart defaults, caching, workflows,    │
+│  prompts, kibitzer, resources           │
+│                                         │
+│  ┌───────────────────────────────────┐  │
+│  │  fledgling (Python API)           │  │  pip install fledgling
+│  │  fledgling.connect()              │  │
+│  │  con.find_definitions().show()    │  │
+│  │                                   │  │
+│  │  ┌─────────────────────────────┐  │  │
+│  │  │  SQL macros (DuckDB)        │  │  │  curl | duckdb
+│  │  │  14 MCP tools               │  │  │
+│  │  │  read_lines, sitting_duck,  │  │  │
+│  │  │  duck_tails, duckdb_markdown│  │  │
+│  │  └─────────────────────────────┘  │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
+The SQL macros are the foundation — pure DuckDB, zero Python dependency, sandboxed read-only. The Python API wraps them as composable Relations. The FastMCP layer adds coordination intelligence.
 
 ## Development
 
 ```bash
+git clone https://github.com/teaguesterling/fledgling.git
+cd fledgling
+pip install -e ".[pro]"
 pip install duckdb pytest
 pytest
 ```
+
+523 tests across SQL macros, MCP integration, CLI, Python API, and FastMCP server.
+
+## Coming Soon
+
+- **fledgling-edit** — AST-aware code editing with pattern matching and template substitution ([design spec](docs/superpowers/specs/2026-03-29-fledgling-edit-design.md))
+- **Kit management** — Quartermaster pattern: curated tool subsets per task type with model-aware configuration
 
 ## Why "Fledgling"?
 
