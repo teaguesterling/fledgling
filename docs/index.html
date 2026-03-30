@@ -421,6 +421,10 @@ con.<span class="fn">find_definitions</span>(<span class="str">'**/*.py'</span>,
 con.<span class="fn">recent_changes</span>(5).<span class="fn">select</span>(<span class="str">'hash, message'</span>).<span class="fn">df</span>()
 con.<span class="fn">code_structure</span>(<span class="str">'src/**/*.py'</span>).<span class="fn">filter</span>(<span class="str">'cyclomatic_complexity > 5'</span>).<span class="fn">show</span>()</div>
 
+    <h2>Coming Soon: fledgling-edit</h2>
+    <p>AST-aware code editing — rename, remove, move, and pattern-rewrite using structural targets instead of line numbers.
+       <a href="https://github.com/teaguesterling/fledgling/blob/main/docs/edit/index.md" style="color: var(--accent)">Design docs</a> (experimental).</p>
+
     <footer>
         <a href="https://github.com/teaguesterling/fledgling">GitHub</a> &middot;
         Apache-2.0 &middot;
