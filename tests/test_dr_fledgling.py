@@ -7,7 +7,7 @@ from conftest import load_sql
 @pytest.fixture
 def dr_macros(con):
     """Connection with dr_fledgling macro loaded."""
-    con.execute("SET VARIABLE fledgling_version = '0.5.0'")
+    con.execute("SET VARIABLE fledgling_version = '0.6.0'")
     con.execute("SET VARIABLE fledgling_profile = 'analyst'")
     con.execute("SET VARIABLE session_root = '/test/root'")
     con.execute("SET VARIABLE fledgling_modules = ['source', 'code']")
@@ -24,7 +24,7 @@ class TestDrFledgling:
         rows = dr_macros.execute(
             "SELECT value FROM dr_fledgling() WHERE key = 'version'"
         ).fetchall()
-        assert rows[0][0] == "0.5.0"
+        assert rows[0][0] == "0.6.0"
 
     def test_profile(self, dr_macros):
         rows = dr_macros.execute(
