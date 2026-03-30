@@ -2,7 +2,7 @@
 
 **The FastMCP coordination layer on top of fledgling's SQL macros.**
 
-Fledgling Pro wraps the same DuckDB macros as the pure-SQL MCP server but adds intelligence: smart defaults, token awareness, compound workflows, session caching, prompt templates, and a kibitzer that suggests better tool usage.
+Fledgling Pro wraps the same DuckDB macros as the pure-SQL MCP server but adds intelligence: smart defaults, token awareness, compound workflows, session caching, and prompt templates.
 
 ```bash
 pip install fledgling[pro]
@@ -20,7 +20,6 @@ The base fledgling server (pure DuckDB) is a faithful SQL execution engine. You 
 | Agent reads a 3000-line file → 3000 lines of output | Auto-truncates to 200 lines with "use lines='N-M' to narrow" |
 | Agent calls project_overview, then code_structure, then doc_outline → 3 round trips | `explore()` does all three in one call |
 | Agent calls the same query 5 times in a session → 5 DuckDB queries | Session cache returns cached result with a note |
-| Agent uses bash grep when FindDefinitions would be better → no feedback | Kibitzer suggests "Try FindDefinitions for structural search" |
 
 ## Configuration
 
@@ -177,21 +176,22 @@ Cache TTL varies by tool: `project_overview` caches for the session, `working_tr
 #### Access Log
 Tracks every tool call. Exposed via the `fledgling://session` resource.
 
-#### Agent Kibitzer
-Observes tool usage and suggests improvements:
+#### Kibitzer (planned)
+
+> The session infrastructure (cache + access log) is shipped. The kibitzer suggestion engine is designed but not yet implemented.
+
+**Agent kibitzer** — will observe tool usage and suggest improvements:
 
 | Pattern observed | Suggestion |
 |-----------------|-----------|
 | 3+ ReadLines on same file with different `match` | "Try FindInAST for structural search" |
 | ReadLines without `lines` on file > 200 lines | "This file has N lines. Use lines='N-M'" |
 | find_definitions returning 50+ results | "Use name_pattern to narrow" |
-| Repeated identical calls | Shows cached result instead |
 
-#### User Kibitzer
-Analyzes workflow patterns across sessions via the `suggest_improvements` tool:
-- Detects bash-heavy usage → suggests structured tools
-- Detects missing CLAUDE.md guidance → suggests additions
-- Detects unused tool categories → suggests trying them
+**User kibitzer** — will analyze workflow patterns across sessions:
+- Detect bash-heavy usage → suggest structured tools
+- Detect missing CLAUDE.md guidance → suggest additions
+- Detect unused tool categories → suggest trying them
 
 ## Architecture
 
@@ -219,12 +219,12 @@ Pro doesn't duplicate any SQL — it calls the same macros through `fledgling.co
 |-|-------------------|---------------|
 | **Runtime** | DuckDB CLI only | Python + DuckDB |
 | **Install** | `curl \| duckdb` | `pip install fledgling[pro]` |
-| **Tools** | 14 | 30 (14 base + workflows + kibitzer) |
+| **Tools** | 14 | 30 (22 base macros + 4 workflows + 4 meta) |
 | **Resources** | 0 | 5 |
 | **Prompts** | 0 | 3 |
 | **Smart defaults** | No | Yes |
 | **Truncation** | No | Yes |
 | **Caching** | No | Yes |
-| **Kibitzer** | No | Yes |
+| **Kibitzer** | No | Planned (infrastructure shipped) |
 | **Sandbox** | `allowed_directories` | Python process boundary |
 | **Extensions** | All DuckDB community | All DuckDB community |
