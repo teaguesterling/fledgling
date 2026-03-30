@@ -9,6 +9,7 @@ from fledgling.edit.transforms import (
 )
 from fledgling.edit.changeset import Changeset
 from fledgling.edit.template import template_replace
+from fledgling.edit.locate import locate
 
 __all__ = [
     "Region", "MatchRegion", "CapturedNode",
@@ -16,4 +17,5 @@ __all__ = [
     "remove", "replace_body", "insert_before", "insert_after", "wrap", "move", "rename_in",
     "Changeset",
     "template_replace",
+    "locate",
 ]
