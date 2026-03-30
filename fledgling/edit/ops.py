@@ -70,7 +70,9 @@ class Move(EditOp):
     destination: Region = None  # type: ignore[assignment]
 
     def __post_init__(self):
-        if self.destination is not None and not self.destination.is_located:
+        if self.destination is None:
+            raise ValueError("Move requires a destination Region")
+        if not self.destination.is_located:
             raise ValueError(
                 "Move destination must be located (have file_path and lines)"
             )

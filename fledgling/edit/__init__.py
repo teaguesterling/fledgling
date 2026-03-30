@@ -28,7 +28,7 @@ from fledgling.edit.transforms import (
 from fledgling.edit.changeset import Changeset
 from fledgling.edit.template import template_replace
 from fledgling.edit.builder import Editor
-from fledgling.edit.validate import validate_syntax
+from fledgling.edit.validate import ValidationError, validate_syntax
 
 # Targeting bridge imports (require fledgling connection at call time)
 from fledgling.edit.locate import locate, match, match_replace
@@ -46,7 +46,7 @@ __all__ = [
     # Template
     "template_replace",
     # Validation
-    "validate_syntax",
+    "validate_syntax", "ValidationError",
     # Builder
     "Editor",
     # Targeting

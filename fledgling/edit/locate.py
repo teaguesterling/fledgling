@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import replace
 from typing import Optional
 
@@ -43,11 +44,18 @@ def locate(
         name: Name or SQL LIKE pattern to filter by.
         kind: What to find -- "definition", "function", "class", "import",
               "call", "loop", "conditional", "string", "comment".
+              When omitted and name is given, defaults to "definition".
         resolve: Whether to fill in content from the file.
         columns: Whether to request column positions (source='full').
 
     Returns:
         List of Region objects.
+
+    Note:
+        When kind is "definition" and no specific name is given, results are
+        limited to definitions at depth <= 2 by the underlying find_definitions
+        macro (designed for navigation noise reduction). To find deeply nested
+        definitions, provide a specific name or name pattern.
     """
     if kind and kind not in _DEFINITION_KINDS and kind not in _AST_KINDS:
         raise ValueError(
@@ -132,10 +140,15 @@ def _locate_ast(
 
     regions = []
     for file_path, rname, start_line, context in rows:
+        # find_in_ast only returns start_line. Multi-line constructs
+        # (imports, loops, etc.) get a single-line region. Callers should
+        # resolve() to get the actual content for single-line operations,
+        # but Remove on multi-line constructs found this way will only
+        # delete the first line.
         r = Region(
             file_path=file_path,
             start_line=start_line,
-            end_line=start_line,  # single-line approximation
+            end_line=start_line,
             name=rname,
             kind=kind,
         )
@@ -185,50 +198,53 @@ def match(
     Returns:
         List of MatchRegion objects with named captures.
     """
-    # Create temp table with AST for the file pattern
+    # Create temp table with unique name to avoid race conditions
+    table_name = f"_edit_ast_{uuid.uuid4().hex[:8]}"
     source_param = "'full'" if columns else "'lines'"
     con.execute(f"""
-        CREATE OR REPLACE TEMP TABLE _edit_ast AS
+        CREATE OR REPLACE TEMP TABLE {table_name} AS
         SELECT * FROM read_ast(?, source={source_param})
     """, [file_pattern])
 
-    # Run ast_match
-    rows = con.execute(
-        "SELECT match_id, file_path, start_line, end_line, peek, captures "
-        "FROM ast_match('_edit_ast', ?, ?, match_by := ?, depth_fuzz := ?)",
-        [pattern, language, match_by, depth_fuzz],
-    ).fetchall()
+    try:
+        # Run ast_match
+        rows = con.execute(
+            f"SELECT match_id, file_path, start_line, end_line, peek, captures "
+            f"FROM ast_match('{table_name}', ?, ?, match_by := ?, depth_fuzz := ?)",
+            [pattern, language, match_by, depth_fuzz],
+        ).fetchall()
 
-    regions = []
-    for match_id, file_path, start_line, end_line, peek, captures_map in rows:
-        # Parse captures map into CapturedNode objects
-        captures = _parse_captures(captures_map)
+        regions = []
+        for match_id, file_path, start_line, end_line, peek, captures_map in rows:
+            # Parse captures map into CapturedNode objects
+            captures = _parse_captures(captures_map)
 
-        sc = None
-        ec = None
-        if columns:
-            col_rows = con.execute(
-                "SELECT start_column, end_column FROM _edit_ast "
-                "WHERE file_path = ? AND start_line = ? LIMIT 1",
-                [file_path, start_line],
-            ).fetchall()
-            if col_rows:
-                sc, ec = col_rows[0]
+            sc = None
+            ec = None
+            if columns:
+                col_rows = con.execute(
+                    f"SELECT start_column, end_column FROM {table_name} "
+                    "WHERE file_path = ? AND start_line = ? LIMIT 1",
+                    [file_path, start_line],
+                ).fetchall()
+                if col_rows:
+                    sc, ec = col_rows[0]
 
-        mr = MatchRegion(
-            file_path=file_path,
-            start_line=start_line,
-            end_line=end_line,
-            start_column=sc,
-            end_column=ec,
-            name=peek,
-            captures=captures,
-        )
-        if resolve:
-            mr = mr.resolve()
-        regions.append(mr)
+            mr = MatchRegion(
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                start_column=sc,
+                end_column=ec,
+                name=peek,
+                captures=captures,
+            )
+            if resolve:
+                mr = mr.resolve()
+            regions.append(mr)
+    finally:
+        con.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-    con.execute("DROP TABLE IF EXISTS _edit_ast")
     return regions
 
 

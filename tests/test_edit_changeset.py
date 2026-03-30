@@ -129,6 +129,15 @@ class TestChangesetValidate:
         assert len(warnings) > 0
         assert "overlap" in warnings[0].lower()
 
+    def test_shared_boundary_line_warns(self, sample_file):
+        """Lines 1-3 and 3-5 both touch line 3 — must warn."""
+        r1 = Region.at(sample_file, 1, 3)
+        r2 = Region.at(sample_file, 3, 5)
+        cs = Changeset([Remove(region=r1), Remove(region=r2)])
+        warnings = cs.validate()
+        assert len(warnings) > 0
+        assert "overlap" in warnings[0].lower()
+
     def test_non_overlapping_no_warnings(self, sample_file):
         r1 = Region.at(sample_file, 1, 2)
         r2 = Region.at(sample_file, 4, 5)

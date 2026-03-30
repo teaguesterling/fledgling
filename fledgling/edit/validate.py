@@ -7,6 +7,10 @@ from typing import Optional
 import duckdb
 
 
+class ValidationError(Exception):
+    """Raised when validate_syntax encounters an infrastructure error."""
+
+
 def validate_syntax(
     content: str,
     language: str,
@@ -16,6 +20,10 @@ def validate_syntax(
 
     Uses parse_ast() to parse in-memory content. Returns True if the
     content parses successfully, False if there are syntax errors.
+
+    Raises:
+        ValidationError: If the validation infrastructure fails (e.g.,
+            missing extension, unsupported language).
     """
     if not content.strip():
         return True
@@ -25,5 +33,7 @@ def validate_syntax(
             [content, language],
         ).fetchone()
         return rows is not None and rows[0] == 0
+    except duckdb.CatalogException as e:
+        raise ValidationError(f"Validation infrastructure error: {e}") from e
     except duckdb.Error:
         return False

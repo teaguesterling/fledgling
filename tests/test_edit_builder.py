@@ -5,6 +5,8 @@ import os
 import pytest
 import duckdb
 
+from conftest import load_sql
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from fledgling.edit.builder import Editor
@@ -17,9 +19,8 @@ def editor(tmp_path):
     con = duckdb.connect(":memory:")
     con.execute("LOAD sitting_duck")
     con.execute("LOAD read_lines")
-    sql_dir = os.path.join(PROJECT_ROOT, "sql")
     for f in ["source.sql", "code.sql"]:
-        _load_sql(con, os.path.join(sql_dir, f))
+        load_sql(con, f)
 
     # Create test files
     src = tmp_path / "src"
@@ -35,16 +36,6 @@ def editor(tmp_path):
 
     return Editor(con), str(tmp_path)
 
-
-def _load_sql(con, path):
-    with open(path) as f:
-        sql = f.read()
-    lines = [l for l in sql.split("\n") if not l.strip().startswith("--")]
-    cleaned = "\n".join(lines)
-    for stmt in cleaned.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            con.execute(stmt + ";")
 
 
 class TestEditorDefinitions:

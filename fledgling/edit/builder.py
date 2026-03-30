@@ -89,7 +89,7 @@ class MatchSelection:
         return Changeset([_remove(r) for r in self._regions])
 
     def replace_with(self, template: str) -> Changeset:
-        """Replace matches using a template with __CAPTURE__ substitution."""
+        """Replace matches using a template with __NAME__ wildcard substitution."""
         from fledgling.edit.template import template_replace
         ops = []
         for mr in self._regions:

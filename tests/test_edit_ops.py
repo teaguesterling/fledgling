@@ -65,3 +65,8 @@ class TestMove:
         dst = Region.of("standalone content")
         with pytest.raises(ValueError, match="located"):
             Move(region=src, destination=dst)
+
+    def test_move_destination_required(self):
+        src = Region.at("a.py", 10, 20)
+        with pytest.raises(ValueError, match="destination"):
+            Move(region=src)
