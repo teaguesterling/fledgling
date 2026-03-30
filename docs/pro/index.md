@@ -36,11 +36,12 @@ The base fledgling server (pure DuckDB) is a faithful SQL execution engine. You 
 }
 ```
 
-### Project Config (.fledgling.toml)
+### Project Config (.fledgling-python/config.toml)
 
 Optional — Pro infers everything it can. Override when the inference is wrong:
 
 ```toml
+# .fledgling-python/config.toml
 [defaults]
 code_pattern = "src/**/*.py"      # override auto-detected language
 doc_pattern = "documentation/**/*.md"  # override auto-detected doc dir
