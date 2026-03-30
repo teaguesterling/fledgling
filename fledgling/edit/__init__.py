@@ -7,9 +7,11 @@ from fledgling.edit.ops import (
 from fledgling.edit.transforms import (
     remove, replace_body, insert_before, insert_after, wrap, move, rename_in,
 )
+from fledgling.edit.changeset import Changeset
 
 __all__ = [
     "Region", "MatchRegion", "CapturedNode",
     "EditOp", "Remove", "Replace", "InsertBefore", "InsertAfter", "Wrap", "Move",
     "remove", "replace_body", "insert_before", "insert_after", "wrap", "move", "rename_in",
+    "Changeset",
 ]
