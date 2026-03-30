@@ -1,6 +1,6 @@
 # P4-004: Compound Workflow Tools
 
-## Status: Ready
+## Status: Done
 
 ## Problem
 

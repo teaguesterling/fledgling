@@ -1,6 +1,6 @@
 # P4-005: MCP Prompt Templates
 
-## Status: Ready (depends on P4-004)
+## Status: Done
 
 ## Problem
 

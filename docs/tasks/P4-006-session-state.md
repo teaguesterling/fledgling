@@ -1,6 +1,6 @@
 # P4-006: Session State — Caching, Access Log, and Kibitzer
 
-## Status: Ready
+## Status: Done
 
 ## Problem
 
