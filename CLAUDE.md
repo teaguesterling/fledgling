@@ -188,6 +188,21 @@ sql/
   tools/<tier>.sql          Tool publications (one file per tier)
   profiles/core.sql         Core profile: memory_limit + mcp_server_options
   profiles/analyst.sql      Analyst profile: memory_limit + mcp_server_options
+fledgling/
+  __init__.py               Package root (connection helpers)
+  edit/                     AST-aware code editing subpackage
+    __init__.py             Public API re-exports
+    region.py               Region, MatchRegion, CapturedNode
+    ops.py                  EditOp hierarchy (Remove, Replace, etc.)
+    transforms.py           Stateless transform functions
+    changeset.py            Changeset: preview, diff, apply
+    template.py             Template substitution (__NAME__ wildcards)
+    locate.py               Targeting bridge: locate(), match(), match_replace()
+    builder.py              Fluent Editor API
+    validate.py             AST syntax validation
+    mcp.py                  FastMCP tool registration
+    cli.py                  CLI entry point
+    postprocess/            Language-specific post-processors
 config/
   claude-code.example.json  Example MCP server config
 tests/
