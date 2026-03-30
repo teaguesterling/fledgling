@@ -11,6 +11,7 @@ from fledgling.edit.changeset import Changeset
 from fledgling.edit.template import template_replace
 from fledgling.edit.locate import locate, match, match_replace
 from fledgling.edit.builder import Editor
+from fledgling.edit.validate import validate_syntax
 
 __all__ = [
     "Region", "MatchRegion", "CapturedNode",
@@ -22,4 +23,5 @@ __all__ = [
     "match",
     "match_replace",
     "Editor",
+    "validate_syntax",
 ]

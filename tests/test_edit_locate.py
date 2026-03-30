@@ -79,3 +79,17 @@ class TestLocateByKind:
     def test_unknown_kind_raises(self, code_con):
         with pytest.raises(ValueError, match="kind"):
             locate(code_con, "**/*.py", kind="unknown_thing")
+
+
+from fledgling.edit.validate import validate_syntax
+
+
+class TestValidateSyntax:
+    def test_valid_python(self, code_con):
+        assert validate_syntax("def foo(): pass\n", "python", code_con) is True
+
+    def test_invalid_python(self, code_con):
+        assert validate_syntax("def (broken syntax\n", "python", code_con) is False
+
+    def test_empty_content(self, code_con):
+        assert validate_syntax("", "python", code_con) is True
