@@ -50,9 +50,9 @@
 ### [Conversations](macros/conversations.md)
 `sessions` `messages` `content_blocks` `tool_calls` `tool_results` `token_usage` `tool_frequency` `bash_commands` `session_summary` `model_usage` `search_messages` `search_tool_inputs`
 
-## Fledgling Pro
+## [Fledgling Pro](pro/index.md)
 
-The `fledgling[pro]` package adds a [FastMCP](https://gofastmcp.com) server with coordination intelligence:
+The `fledgling[pro]` package adds a [FastMCP](https://gofastmcp.com) server with coordination intelligence. [Full documentation &rarr;](pro/index.md)
 
 | Feature | Description |
 |---------|-------------|
