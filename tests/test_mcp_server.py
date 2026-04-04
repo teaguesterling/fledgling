@@ -351,26 +351,39 @@ class TestHelp:
 class TestGitDiffFile:
     """GitDiffFile uses text format: unified diff with +/- prefixes."""
 
-    def test_returns_diff_lines(self, mcp_server):
-        # Find a file that changed in the last commit
+    def _find_changed_file(self, mcp_server, from_rev="HEAD~1", to_rev="HEAD"):
+        """Find a file that actually changed between two revisions."""
         summary = call_tool(mcp_server, "GitDiffSummary", {
-            "from_rev": "HEAD~1",
-            "to_rev": "HEAD",
+            "from_rev": from_rev,
+            "to_rev": to_rev,
         })
-        # The tool should return diff lines
+        # Parse first data row from markdown table
+        for line in summary.strip().split("\n"):
+            if "|" in line and "file_path" not in line and "---" not in line:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if parts:
+                    return parts[0]
+        return None
+
+    def test_returns_diff_lines(self, mcp_server):
+        """Diff of a changed file returns non-empty output."""
+        changed = self._find_changed_file(mcp_server)
+        assert changed is not None, "No files changed in HEAD~1..HEAD"
         text = call_tool(mcp_server, "GitDiffFile", {
-            "file": "sql/install-fledgling.sql",
-            "from_rev": "HEAD~2",
+            "file": changed,
+            "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
         lines = [l for l in text.strip().split("\n") if l.strip()]
         assert len(lines) > 0
 
-    @pytest.mark.xfail(reason="Flaky — depends on recent commits touching the file")
     def test_shows_additions_and_removals(self, mcp_server):
+        """Diff output contains + or - markers."""
+        changed = self._find_changed_file(mcp_server)
+        assert changed is not None, "No files changed in HEAD~1..HEAD"
         text = call_tool(mcp_server, "GitDiffFile", {
-            "file": "sql/code.sql",
-            "from_rev": "HEAD~10",
+            "file": changed,
+            "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
         assert "+" in text or "-" in text
