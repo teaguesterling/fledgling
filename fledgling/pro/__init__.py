@@ -1,3 +1,3 @@
 """Fledgling Pro: FastMCP coordination layer on top of fledgling's DuckDB macros."""
 
-__version__ = "0.6.0"
+__version__ = "0.6.2"
