@@ -92,7 +92,6 @@ class TestHelp:
         assert "find-definitions" in out or "find_definitions" in out
         assert "recent-changes" in out or "recent_changes" in out
 
-    @pytest.mark.xfail(reason="DuckDB 1.5.0 UTF-8 error rendering help content")
     def test_help_section(self, cli_init):
         rc, out, err = run_cli("help", "workflows", init_path=cli_init)
         assert rc == 0, f"rc={rc}, stderr={err}, stdout={out[:200]}"
@@ -244,7 +243,6 @@ class TestDocOutline:
 
 
 class TestReadDocSection:
-    @pytest.mark.xfail(reason="DuckDB 1.5.0 UTF-8 error rendering markdown content")
     def test_section(self, cli_init):
         rc, out, _ = run_cli(
             "read-doc-section", "SKILL.md", "workflows",
