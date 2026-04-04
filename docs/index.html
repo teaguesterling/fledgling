@@ -264,7 +264,7 @@
 
     <div class="install-box" id="custom-install">
         <button class="copy" onclick="copyCommand()">copy</button>
-        <code id="install-command">curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb</code>
+        <code id="install-command">curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql | duckdb</code>
     </div>
 
     <p>Run from your project root. Creates three files and you're done.</p>
@@ -402,7 +402,7 @@ $ fledgling query <span class="str">"SELECT * FROM sessions() LIMIT 5"</span></d
     <h2>Fledgling Pro</h2>
     <p>A FastMCP server that adds coordination intelligence on top of the SQL macros.</p>
     <div class="install-box">
-        <code>pip install fledgling[pro]</code>
+        <code>pip install fledgling-mcp[pro]</code>
     </div>
     <div class="grid">
         <div class="card"><strong>Smart Defaults</strong><span>Auto-detects language, doc dir, git branch</span></div>
@@ -435,7 +435,7 @@ con.<span class="fn">code_structure</span>(<span class="str">'src/**/*.py'</span
 </div>
 <script>
 const ALL_MODULES = ['source','code','docs','repo','structural','conversations','help'];
-const BASE = 'curl -sL https://teaguesterling.github.io/fledgling/install.sql';
+const BASE = 'curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql';
 
 function getSelected() {
     const modules = [...document.querySelectorAll('.module-grid input:checked')].map(e => e.value);

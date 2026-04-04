@@ -2,7 +2,7 @@
 
 **MCP tools that help AI agents get their bearings in a codebase — unified SQL views over code, git, docs, and conversations, powered by DuckDB.**
 
-> **Install:** `curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb`
+> **Install:** `curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql | duckdb`
 >
 > Or use the [interactive installer](https://teaguesterling.github.io/fledgling/) to customize modules and profile.
 
@@ -11,8 +11,8 @@
 | Layer | Install | What you get |
 |-------|---------|-------------|
 | **SQL macros** | `curl \| duckdb` | 14 MCP tools, 20+ query macros, pure DuckDB, zero Python |
-| **Python API** | `pip install fledgling` | `fledgling.connect()`, macros as methods, CLI |
-| **FastMCP Pro** | `pip install fledgling[pro]` | Smart defaults, caching, workflows, kibitzer |
+| **Python API** | `pip install fledgling-mcp` | `fledgling.connect()`, macros as methods, CLI |
+| **FastMCP Pro** | `pip install fledgling-mcp[pro]` | Smart defaults, caching, workflows, kibitzer |
 
 ## MCP Tools (14)
 

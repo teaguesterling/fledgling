@@ -6,14 +6,14 @@ MCP tools that help AI agents get their bearings in a codebase — unified SQL v
 
 ```bash
 # Zero-dependency MCP server (pure DuckDB, no Python)
-curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb
+curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql | duckdb
 
 # Python API
-pip install fledgling
+pip install fledgling-mcp
 python -c "import fledgling; fledgling.connect().find_definitions('**/*.py').show()"
 
 # FastMCP server with smart defaults, caching, and compound workflows
-pip install fledgling[pro]
+pip install fledgling-mcp[pro]
 fledgling-pro
 ```
 
@@ -116,7 +116,7 @@ Tab completion: `eval "$(fledgling --completions bash)"`
 ### Per-project (recommended)
 
 ```bash
-curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb
+curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql | duckdb
 ```
 
 Creates `.fledgling-init.sql`, `.fledgling-help.md`, and `.mcp.json` in your project root. Customize modules and profile on the [install page](https://teaguesterling.github.io/fledgling/).
@@ -124,8 +124,8 @@ Creates `.fledgling-init.sql`, `.fledgling-help.md`, and `.mcp.json` in your pro
 ### Via pip
 
 ```bash
-pip install fledgling          # CLI + Python API
-pip install fledgling[pro]     # + FastMCP server
+pip install fledgling-mcp          # CLI + Python API
+pip install fledgling-mcp[pro]     # + FastMCP server
 ```
 
 ### Requirements
@@ -137,12 +137,12 @@ pip install fledgling[pro]     # + FastMCP server
 
 ```
 ┌─────────────────────────────────────────┐
-│  fledgling-pro (FastMCP)                │  pip install fledgling[pro]
+│  fledgling-pro (FastMCP)                │  pip install fledgling-mcp[pro]
 │  Smart defaults, caching, workflows,    │
 │  prompts, kibitzer, resources           │
 │                                         │
 │  ┌───────────────────────────────────┐  │
-│  │  fledgling (Python API)           │  │  pip install fledgling
+│  │  fledgling (Python API)           │  │  pip install fledgling-mcp
 │  │  fledgling.connect()              │  │
 │  │  con.find_definitions().show()    │  │
 │  │                                   │  │

@@ -126,7 +126,7 @@ fi
 # ── Handle update (before init resolution — update doesn't need a running init) ──
 
 if [[ "${rest[0]:-}" == "update" ]]; then
-    INSTALL_URL="https://teaguesterling.github.io/fledgling/install.sql"
+    INSTALL_URL="https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql"
 
     # Find existing init to extract config
     _current_init=""
@@ -200,7 +200,7 @@ elif [[ -f "${HOME}/.fledgling/init.sql" ]]; then
 else
     echo "Error: no fledgling init file found." >&2
     echo "  Looked for: .fledgling-init.sql, ~/.fledgling/init.sql" >&2
-    echo "  Install: curl -sL https://teaguesterling.github.io/fledgling/install.sql | duckdb" >&2
+    echo "  Install: curl -sL https://raw.githubusercontent.com/teaguesterling/fledgling/main/sql/install-fledgling.sql | duckdb" >&2
     exit 1
 fi
 

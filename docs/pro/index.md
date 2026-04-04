@@ -5,7 +5,7 @@
 Fledgling Pro wraps the same DuckDB macros as the pure-SQL MCP server but adds intelligence: smart defaults, token awareness, compound workflows, session caching, and prompt templates.
 
 ```bash
-pip install fledgling[pro]
+pip install fledgling-mcp[pro]
 fledgling-pro                    # start MCP server
 python -m fledgling.pro          # same thing
 ```
@@ -219,7 +219,7 @@ Pro doesn't duplicate any SQL — it calls the same macros through `fledgling.co
 | | Base (duckdb_mcp) | Pro (FastMCP) |
 |-|-------------------|---------------|
 | **Runtime** | DuckDB CLI only | Python + DuckDB |
-| **Install** | `curl \| duckdb` | `pip install fledgling[pro]` |
+| **Install** | `curl \| duckdb` | `pip install fledgling-mcp[pro]` |
 | **Tools** | 14 | 30 (22 base macros + 4 workflows + 4 meta) |
 | **Resources** | 0 | 5 |
 | **Prompts** | 0 | 3 |
