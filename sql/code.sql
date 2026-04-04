@@ -125,6 +125,7 @@ CREATE OR REPLACE MACRO code_structure(file_pattern) AS TABLE
         SELECT
             file_path,
             name,
+            node_id,
             semantic_type,
             start_line,
             end_line,
@@ -135,8 +136,23 @@ CREATE OR REPLACE MACRO code_structure(file_pattern) AS TABLE
           AND name != ''
           AND depth <= 2
     ),
-    metrics AS (
-        SELECT * FROM ast_function_metrics(ast)
+    func_complexity AS (
+        SELECT
+            d.node_id,
+            count(CASE WHEN is_conditional(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
+                     OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
+                     OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
+                THEN 1 END) AS conditionals,
+            count(CASE WHEN is_loop(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_expression'
+                     OR n.type LIKE '%_loop')
+                THEN 1 END) AS loops
+        FROM defs d
+        JOIN ast n ON n.node_id > d.node_id
+                  AND n.node_id <= d.node_id + d.descendant_count
+        WHERE is_function_definition(d.semantic_type)
+        GROUP BY d.node_id
     )
     SELECT
         d.file_path,
@@ -147,18 +163,18 @@ CREATE OR REPLACE MACRO code_structure(file_pattern) AS TABLE
         d.end_line - d.start_line + 1 AS line_count,
         d.descendant_count,
         d.children_count,
-        m.cyclomatic AS cyclomatic_complexity
+        CASE WHEN is_function_definition(d.semantic_type)
+             THEN fc.conditionals + fc.loops + 1
+             ELSE NULL END AS cyclomatic_complexity
     FROM defs d
-    LEFT JOIN metrics m ON d.file_path = m.file_path AND d.name = m.name
+    LEFT JOIN func_complexity fc ON d.node_id = fc.node_id
     ORDER BY d.file_path, d.start_line;
 
 -- complexity_hotspots: Find the most complex functions in a codebase.
 -- Returns functions ranked by cyclomatic complexity with structural metrics.
 -- Useful for identifying code that needs refactoring or careful review.
---
--- Note: requires materializing the AST into a temp table because
--- ast_function_metrics takes a table reference, not a file pattern.
--- This macro handles that internally.
+-- Inlines the complexity calculation (avoids CTE-as-table-ref issue with
+-- ast_function_metrics in some execution paths).
 --
 -- Examples:
 --   SELECT * FROM complexity_hotspots('src/**/*.py');
@@ -167,19 +183,46 @@ CREATE OR REPLACE MACRO complexity_hotspots(file_pattern, n := 20) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(file_pattern)
     ),
-    metrics AS (
-        SELECT * FROM ast_function_metrics(ast)
+    funcs AS (
+        SELECT node_id, file_path, name, start_line, end_line, depth AS func_depth, descendant_count
+        FROM ast
+        WHERE is_function_definition(semantic_type)
+          AND name IS NOT NULL AND name != ''
+    ),
+    func_metrics AS (
+        SELECT
+            f.node_id,
+            f.file_path,
+            f.name,
+            f.start_line,
+            f.end_line,
+            (f.end_line - f.start_line + 1) AS lines,
+            count(CASE WHEN n.type = 'return_statement' THEN 1 END) AS return_count,
+            count(CASE WHEN is_conditional(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
+                     OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
+                     OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
+                THEN 1 END) AS conditionals,
+            count(CASE WHEN is_loop(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_expression'
+                     OR n.type LIKE '%_loop')
+                THEN 1 END) AS loops,
+            COALESCE(CAST(max(n.depth) AS INTEGER) - CAST(f.func_depth AS INTEGER), 0) AS max_depth
+        FROM funcs f
+        LEFT JOIN ast n ON n.node_id > f.node_id
+                       AND n.node_id <= f.node_id + f.descendant_count
+        GROUP BY f.node_id, f.file_path, f.name, f.start_line, f.end_line, f.func_depth
     )
     SELECT
         file_path,
         name,
         lines,
-        cyclomatic,
+        conditionals + loops + 1 AS cyclomatic,
         conditionals,
         loops,
         return_count,
         max_depth
-    FROM metrics
+    FROM func_metrics
     ORDER BY cyclomatic DESC
     LIMIT n;
 

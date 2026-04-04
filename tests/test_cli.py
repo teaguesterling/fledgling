@@ -197,7 +197,6 @@ class TestFindDefinitions:
 
 
 class TestCodeStructure:
-    @pytest.mark.xfail(reason="CTE reference in macro fails through CLI .read path")
     def test_structure(self, cli_init):
         rc, out, _ = run_cli("code-structure", "tests/conftest.py", init_path=cli_init)
         assert rc == 0
@@ -223,7 +222,6 @@ class TestFindCalls:
 
 
 class TestComplexityHotspots:
-    @pytest.mark.xfail(reason="CTE reference in macro fails through CLI .read path")
     def test_hotspots(self, cli_init):
         rc, out, _ = run_cli(
             "complexity-hotspots", "tests/conftest.py", "5",
@@ -392,7 +390,6 @@ class TestPascalCase:
         assert rc == 0
         assert "hash" in out.lower()
 
-    @pytest.mark.xfail(reason="CTE reference in macro fails through CLI .read path")
     def test_pascal_code_structure(self, cli_init):
         rc, out, _ = run_cli("CodeStructure", "tests/conftest.py", init_path=cli_init)
         assert rc == 0
