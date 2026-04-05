@@ -109,6 +109,67 @@ CREATE OR REPLACE MACRO find_in_ast(file_pattern, kind, name_pattern := '%') AS 
       END
     ORDER BY file_path, start_line;
 
+-- find_code: Search code using CSS selector syntax (via ast_select).
+-- NOTE: Requires sitting_duck with ast_select support (not yet in community extensions).
+-- Returns a compact listing: location, name, type, and one-line preview.
+-- The selector follows sitting_duck's CSS selector syntax:
+--   .func, .class, .call, .import, .loop, .if  (semantic types)
+--   #name                                       (name filter)
+--   :has(child), :not(:has(child))              (structural)
+--   ::callers, ::callees, ::parent              (navigation)
+--
+-- Examples:
+--   SELECT * FROM find_code('**/*.py', '.func');
+--   SELECT * FROM find_code('**/*.py', '.func#validate');
+--   SELECT * FROM find_code('**/*.py', '.func:has(.call#execute)');
+--   SELECT * FROM find_code('**/*.py', '.func:has(.call#execute):not(:has(try))');
+--   SELECT * FROM find_code('**/*.py', '.func#validate::callers');
+CREATE OR REPLACE MACRO find_code(file_pattern, selector, lang := NULL) AS TABLE
+    SELECT
+        file_path,
+        start_line,
+        end_line,
+        name,
+        semantic_type_to_string(semantic_type) AS kind,
+        type AS node_type,
+        peek
+    FROM ast_select(file_pattern, selector, language := lang)
+    ORDER BY file_path, start_line;
+
+-- view_code: Read source for code matched by CSS selector.
+-- NOTE: Requires sitting_duck with ast_select support (not yet in community extensions).
+-- Like find_code but returns the actual source lines with context.
+-- Each result block is prefixed with a header: # file.py:start-end
+--
+-- Examples:
+--   SELECT * FROM view_code('**/*.py', '.func#main');
+--   SELECT * FROM view_code('**/*.py', '.func#validate', ctx := 5);
+--   SELECT * FROM view_code('**/*.py', '.func::callers');
+CREATE OR REPLACE MACRO view_code(file_pattern, selector, lang := NULL, ctx := 0) AS TABLE
+    WITH matches AS (
+        SELECT DISTINCT file_path, start_line, end_line, name
+        FROM ast_select(file_pattern, selector, language := lang)
+        ORDER BY file_path, start_line
+    )
+    SELECT
+        m.file_path,
+        m.name,
+        m.start_line AS match_start,
+        m.end_line AS match_end,
+        r.line_number,
+        r.content
+    FROM matches m,
+    LATERAL (
+        SELECT line_number, content
+        FROM read_lines(
+            m.file_path,
+            CAST(greatest(1, m.start_line - ctx) AS VARCHAR)
+                || '-'
+                || CAST(m.end_line + ctx AS VARCHAR)
+        )
+    ) r
+    ORDER BY m.file_path, m.start_line, r.line_number;
+
 -- code_structure: Get a structural overview of files with complexity metrics.
 -- Shows top-level definitions with size and complexity indicators for triage.
 -- Use this to answer "which functions are large or complex?" before reading code.
