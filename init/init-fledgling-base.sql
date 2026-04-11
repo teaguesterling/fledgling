@@ -36,7 +36,7 @@ SET VARIABLE conversations_root = COALESCE(
 
 -- Fledgling metadata (read by dr_fledgling)
 SET VARIABLE fledgling_version = '0.6.2';
-SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'conversations', 'help'];
+SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'workflows', 'conversations', 'help'];
 
 -- Additional allowed directories (set before this point if needed).
 -- Example: SET VARIABLE extra_dirs = ['/data/shared', '/opt/models'];
@@ -53,6 +53,7 @@ SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural'
 .read sql/docs.sql
 .read sql/repo.sql
 .read sql/structural.sql
+.read sql/workflows.sql
 
 .read sql/conversations.sql
 
@@ -63,5 +64,6 @@ SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural'
 .read sql/tools/code.sql
 .read sql/tools/docs.sql
 .read sql/tools/git.sql
+.read sql/tools/workflows.sql
 .read sql/tools/conversations.sql
 .read sql/tools/help.sql

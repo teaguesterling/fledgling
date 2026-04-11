@@ -24,7 +24,8 @@ SET VARIABLE _base = 'https://raw.githubusercontent.com/teaguesterling/fledgling
 
 -- Default config (all feature modules, analyst profile)
 SET VARIABLE _default_modules = ['source', 'code', 'docs', 'repo',
-                                  'structural', 'conversations', 'help'];
+                                  'structural', 'workflows',
+                                  'conversations', 'help'];
 SET VARIABLE _default_profile = 'analyst';
 
 -- Read user config (set via -cmd before stdin)
@@ -54,15 +55,16 @@ SET VARIABLE _install_cli = COALESCE(
 -- ── 3. Module registry ───────────────────────────────────────────────
 
 CREATE TABLE _module_registry AS FROM (VALUES
-    ('sandbox',       'core',    [],                              [],                        NULL,             NULL),
-    ('dr_fledgling',  'core',    [],                              ['sandbox'],               NULL,             NULL),
-    ('source',        'feature', ['read_lines'],                  ['sandbox'],               'files',          NULL),
-    ('code',          'feature', ['sitting_duck'],                ['sandbox'],               'code',           NULL),
-    ('docs',          'feature', ['markdown'],                    ['sandbox'],               'docs',           NULL),
-    ('repo',          'feature', ['duck_tails'],                  ['sandbox'],               'git',            NULL),
-    ('structural',    'feature', ['sitting_duck','duck_tails'],   ['sandbox','code','repo'], NULL,             NULL),
-    ('conversations', 'feature', [],                              [],                        'conversations',  NULL),
-    ('help',          'feature', ['markdown'],                    [],                        'help',           'SKILL.md')
+    ('sandbox',       'core',    [],                              [],                                                NULL,             NULL),
+    ('dr_fledgling',  'core',    [],                              ['sandbox'],                                       NULL,             NULL),
+    ('source',        'feature', ['read_lines'],                  ['sandbox'],                                       'files',          NULL),
+    ('code',          'feature', ['sitting_duck'],                ['sandbox'],                                       'code',           NULL),
+    ('docs',          'feature', ['markdown'],                    ['sandbox'],                                       'docs',           NULL),
+    ('repo',          'feature', ['duck_tails'],                  ['sandbox'],                                       'git',            NULL),
+    ('structural',    'feature', ['sitting_duck','duck_tails'],   ['sandbox','code','repo'],                         NULL,             NULL),
+    ('workflows',     'feature', [],                              ['sandbox','source','code','docs','repo','structural'], 'workflows',      NULL),
+    ('conversations', 'feature', [],                              [],                                                'conversations',  NULL),
+    ('help',          'feature', ['markdown'],                    [],                                                'help',           'SKILL.md')
 ) AS t(module, kind, extension_deps, module_deps, tool_file, resource);
 
 -- ── 4. Dependency resolution ─────────────────────────────────────────

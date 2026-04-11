@@ -167,7 +167,7 @@ def _split_sql(sql: str) -> list[str]:
 
 _DEFAULT_MODULES = [
     "sandbox", "dr_fledgling",
-    "source", "code", "docs", "repo", "structural",
+    "source", "code", "docs", "repo", "structural", "workflows",
     "conversations", "help",
 ]
 

@@ -38,6 +38,35 @@ def load_sql(con, filename):
             con.execute(stmt + ";")
 
 
+def load_sql_filtered(con, filename, skip_macros):
+    """Load a SQL file but skip CREATE MACRO statements for named macros.
+
+    Workaround for macros that depend on not-yet-released extension features.
+    Example: find_code and view_code in code.sql require sitting_duck's
+    ast_select function, which is not yet in the released community
+    extension. This helper lets test fixtures load the rest of the file.
+
+    Remove usage of this helper once the upstream features are available.
+    """
+    import re
+    path = os.path.join(SQL_DIR, filename)
+    with open(path) as f:
+        sql = f.read()
+    lines = [l for l in sql.split("\n") if not l.strip().startswith("--")]
+    cleaned = "\n".join(lines)
+    skip_patterns = [
+        re.compile(rf"CREATE\s+(OR\s+REPLACE\s+)?MACRO\s+{name}\b", re.IGNORECASE)
+        for name in skip_macros
+    ]
+    for stmt in cleaned.split(";"):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        if any(p.search(stmt) for p in skip_patterns):
+            continue
+        con.execute(stmt + ";")
+
+
 def create_resolve_macros(con, root=PROJECT_ROOT):
     """Create _resolve() and _session_root() macros with an embedded literal.
 
@@ -139,6 +168,27 @@ def structural_macros(con):
     load_sql(con, "code.sql")
     load_sql(con, "repo.sql")
     load_sql(con, "structural.sql")
+    return con
+
+
+@pytest.fixture
+def workflows_macros(con):
+    """Connection with all extensions + every tier needed for workflow composition.
+
+    Uses load_sql_filtered for code.sql to skip find_code/view_code, which
+    depend on sitting_duck's ast_select (not yet in the released community
+    extension as of 2026-04-10). Workflow macros don't reference those.
+    """
+    con.execute("LOAD read_lines")
+    con.execute("LOAD sitting_duck")
+    con.execute("LOAD markdown")
+    con.execute("LOAD duck_tails")
+    load_sql(con, "source.sql")
+    load_sql_filtered(con, "code.sql", skip_macros=["find_code", "view_code"])
+    load_sql(con, "docs.sql")
+    load_sql(con, "repo.sql")
+    load_sql(con, "structural.sql")
+    load_sql(con, "workflows.sql")
     return con
 
 
