@@ -196,6 +196,78 @@ class TestCodeStructure:
             assert row[2] is None
 
 
+class TestFindClassMembers:
+    """find_class_members wraps ast_class_members + read_ast for a
+    parameterized, single-call class-member listing."""
+
+    def _class_node_id(self, code_macros, class_name: str) -> int:
+        """Look up a class's node_id by name in conftest.py's AST."""
+        row = code_macros.execute(
+            """SELECT node_id FROM read_ast(?)
+               WHERE type = 'class_definition' AND name = ?
+               LIMIT 1""",
+            [CONFTEST_PATH, class_name],
+        ).fetchone()
+        assert row is not None, f"class {class_name!r} not found in conftest.py"
+        return row[0]
+
+    def test_returns_class_members(self, code_macros):
+        """Returns at least one row for a real class."""
+        # conftest.py doesn't have many classes, but we can pick any class node
+        # in the fledgling repo reliably. Use the Connection class in
+        # fledgling/connection.py via an absolute path.
+        from conftest import PROJECT_ROOT
+        file_path = f"{PROJECT_ROOT}/fledgling/connection.py"
+        # Find the Connection class's node_id
+        row = code_macros.execute(
+            """SELECT node_id FROM read_ast(?)
+               WHERE type = 'class_definition' AND name = 'Connection'
+               LIMIT 1""",
+            [file_path],
+        ).fetchone()
+        assert row is not None, "Connection class not found"
+        node_id = row[0]
+        # Now call find_class_members
+        rows = code_macros.execute(
+            "SELECT type, name FROM find_class_members(?, ?)",
+            [file_path, node_id],
+        ).fetchall()
+        assert len(rows) > 0
+        # At least one member should be a function/method
+        types = {r[0] for r in rows}
+        assert any("function" in t for t in types) or "method_definition" in types
+
+    def test_columns(self, code_macros):
+        from conftest import PROJECT_ROOT
+        file_path = f"{PROJECT_ROOT}/fledgling/connection.py"
+        desc = code_macros.execute(
+            "DESCRIBE SELECT * FROM find_class_members(?, 0)",
+            [file_path],
+        ).fetchall()
+        col_names = [r[0] for r in desc]
+        assert col_names == [
+            "node_id", "type", "name", "start_line", "end_line",
+            "language", "peek", "descendant_count", "depth", "parent_id",
+        ]
+
+    def test_ordered_by_start_line(self, code_macros):
+        from conftest import PROJECT_ROOT
+        file_path = f"{PROJECT_ROOT}/fledgling/connection.py"
+        row = code_macros.execute(
+            """SELECT node_id FROM read_ast(?)
+               WHERE type = 'class_definition' AND name = 'Connection' LIMIT 1""",
+            [file_path],
+        ).fetchone()
+        if row is None:
+            return  # no class to test against
+        rows = code_macros.execute(
+            "SELECT start_line FROM find_class_members(?, ?)",
+            [file_path, row[0]],
+        ).fetchall()
+        starts = [r[0] for r in rows]
+        assert starts == sorted(starts)
+
+
 class TestComplexityHotspots:
     def test_returns_results(self, code_macros):
         rows = code_macros.execute(

@@ -231,6 +231,45 @@ CREATE OR REPLACE MACRO code_structure(file_pattern) AS TABLE
     LEFT JOIN func_complexity fc ON d.node_id = fc.node_id
     ORDER BY d.file_path, d.start_line;
 
+-- find_class_members: List direct members of a class node.
+-- Returns function/method definitions, class-level assignments, nested
+-- classes, and top-level expression statements (docstrings) inside a
+-- class body. Thin wrapper around sitting_duck's `ast_class_members`
+-- macro — pulls `read_ast` into a CTE so callers only pass a file path
+-- and the target class's node_id.
+--
+-- The class_node_id must come from a prior query that identifies the
+-- class node (e.g. via find_definitions or direct read_ast on the file).
+-- Callers typically filter the result further by `type` to show only the
+-- kinds of members they care about.
+--
+-- Examples:
+--   -- Find Connection class's direct members
+--   WITH target AS (
+--     SELECT node_id FROM find_definitions('src/foo.py', 'Connection')
+--     LIMIT 1
+--   )
+--   SELECT m.name, m.type, m.start_line
+--   FROM target t, find_class_members('src/foo.py', t.node_id) m
+--   WHERE m.type IN ('function_definition', 'method_definition');
+CREATE OR REPLACE MACRO find_class_members(file_path, class_node_id) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(file_path)
+    )
+    SELECT
+        node_id,
+        type,
+        name,
+        start_line,
+        end_line,
+        language,
+        peek,
+        descendant_count,
+        depth,
+        parent_id
+    FROM ast_class_members(ast, class_node_id)
+    ORDER BY start_line;
+
 -- complexity_hotspots: Find the most complex functions in a codebase.
 -- Returns functions ranked by cyclomatic complexity with structural metrics.
 -- Useful for identifying code that needs refactoring or careful review.
