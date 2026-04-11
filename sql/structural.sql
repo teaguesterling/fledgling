@@ -92,30 +92,56 @@ CREATE OR REPLACE MACRO changed_function_summary(from_rev, to_rev, file_pattern,
     ast AS (
         SELECT * FROM read_ast(file_pattern)
     ),
-    metrics AS (
-        SELECT * FROM ast_function_metrics(ast)
-    ),
     defs AS (
         SELECT
             file_path,
             name,
+            node_id,
+            semantic_type,
             semantic_type_to_string(semantic_type) AS kind,
             start_line,
+            descendant_count,
             end_line - start_line + 1 AS lines
         FROM ast
         WHERE is_definition(semantic_type)
           AND depth <= 2
           AND name != ''
+    ),
+    -- Inline cyclomatic calculation (mirrors code_structure and
+    -- complexity_hotspots). The previous version passed the `ast` CTE
+    -- to ast_function_metrics(), which worked in older sitting_duck but
+    -- fails in 908927e where ast_function_metrics(source, language)
+    -- treats its first argument as a file-pattern string and tries to
+    -- open "ast" as a directory.
+    func_complexity AS (
+        SELECT
+            d.node_id,
+            count(CASE WHEN is_conditional(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
+                     OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
+                     OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
+                THEN 1 END) AS conditionals,
+            count(CASE WHEN is_loop(n.semantic_type)
+                AND (n.type LIKE '%_statement' OR n.type LIKE '%_expression'
+                     OR n.type LIKE '%_loop')
+                THEN 1 END) AS loops
+        FROM defs d
+        JOIN ast n ON n.node_id > d.node_id
+                  AND n.node_id <= d.node_id + d.descendant_count
+        WHERE is_function_definition(d.semantic_type)
+        GROUP BY d.node_id
     )
     SELECT
         d.file_path,
         d.name,
         d.kind,
         d.lines,
-        COALESCE(m.cyclomatic, 0) AS cyclomatic,
+        CASE WHEN is_function_definition(d.semantic_type)
+             THEN COALESCE(fc.conditionals + fc.loops + 1, 1)
+             ELSE 0 END AS cyclomatic,
         c.status AS change_status
     FROM defs d
     JOIN changed c ON suffix(d.file_path, '/' || c.file_path)
                    OR d.file_path = c.file_path
-    LEFT JOIN metrics m ON d.file_path = m.file_path AND d.name = m.name
-    ORDER BY COALESCE(m.cyclomatic, 0) DESC, d.file_path, d.start_line;
+    LEFT JOIN func_complexity fc ON d.node_id = fc.node_id
+    ORDER BY cyclomatic DESC, d.file_path, d.start_line;
