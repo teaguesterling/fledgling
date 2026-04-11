@@ -6,6 +6,27 @@ try:
 except Exception:
     __version__ = "0.6.2"  # fallback for editable installs / dev
 
-from fledgling.connection import connect
+from fledgling.connection import (
+    connect,
+    attach,
+    configure,
+    lockdown,
+    load_extensions,
+    set_session_root,
+    load_macros,
+    apply_local_init,
+    Connection,
+)
 
-__all__ = ["connect", "__version__"]
+__all__ = [
+    "connect",
+    "attach",
+    "configure",
+    "lockdown",
+    "load_extensions",
+    "set_session_root",
+    "load_macros",
+    "apply_local_init",
+    "Connection",
+    "__version__",
+]
