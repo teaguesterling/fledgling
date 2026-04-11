@@ -215,6 +215,8 @@ V1_TOOLS = [
     "InvestigateSymbol",
     "ReviewChanges",
     "SearchProject",
+    "PssRender",
+    "AstSelectRender",
 ]
 
 

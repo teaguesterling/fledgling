@@ -65,3 +65,27 @@ PRAGMA mcp_publish_tool(
     '["pattern"]',
     'json'
 );
+
+PRAGMA mcp_publish_tool(
+    'PssRender',
+    'Render code matched by a CSS selector as markdown: file:range headings followed by fenced code blocks. Each match shows the signature line (peek) from the AST — use when you want to see what matches a selector. For full function bodies, use ViewCode.',
+    'SELECT * FROM pss_render(
+        _resolve($source),
+        $selector
+    )',
+    '{"source": {"type": "string", "description": "Glob for files to search (e.g. src/**/*.py)"}, "selector": {"type": "string", "description": "CSS selector: .func, #name, :has(...), ::callers, etc."}}',
+    '["source", "selector"]',
+    'text'
+);
+
+PRAGMA mcp_publish_tool(
+    'AstSelectRender',
+    'Render selector query results grouped under a selector heading with per-match sub-headings (symbol name plus file:range). Same matches as PssRender but with a layout grouped by selector. Signature-level code blocks via AST peek.',
+    'SELECT * FROM ast_select_render(
+        _resolve($source),
+        $selector
+    )',
+    '{"source": {"type": "string", "description": "Glob for files to search (e.g. src/**/*.py)"}, "selector": {"type": "string", "description": "CSS selector: .func, #name, :has(...), ::callers, etc."}}',
+    '["source", "selector"]',
+    'text'
+);

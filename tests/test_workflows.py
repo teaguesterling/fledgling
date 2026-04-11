@@ -150,3 +150,99 @@ class TestSearchQuery:
         # load_sql is defined in conftest.py
         names = [d["name"] for d in defs] if defs else []
         assert any("load" in n for n in names)
+
+
+# ── pss_render ───────────────────────────────────────────────────────
+
+
+class TestPssRender:
+    """pss_render composes ast_select + duck_blocks_to_md into a markdown
+    document with file:range headings and (peek-based) code blocks."""
+
+    def test_returns_single_row(self, workflows_macros):
+        rows = workflows_macros.execute(
+            "SELECT * FROM pss_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchall()
+        assert len(rows) == 1
+
+    def test_result_is_markdown_string(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM pss_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        md_text = row[0]
+        assert isinstance(md_text, str)
+        assert len(md_text) > 0
+
+    def test_contains_heading_with_file_range(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM pss_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        md_text = row[0]
+        # Each match produces a level-1 heading with file:range
+        assert "# " in md_text
+        assert "connection.py:" in md_text
+
+    def test_contains_fenced_code_blocks(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM pss_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        md_text = row[0]
+        # Code blocks should be fenced with language tag
+        assert "```python" in md_text
+
+    def test_no_matches_returns_valid_output(self, workflows_macros):
+        """Selector matching zero nodes returns a valid (possibly empty) result."""
+        row = workflows_macros.execute(
+            "SELECT * FROM pss_render(?, '.func#nonexistent_symbol_xyz_abc')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        # Should not raise; result may be None or empty string
+        assert row is not None
+
+
+# ── ast_select_render ────────────────────────────────────────────────
+
+
+class TestAstSelectRender:
+    """ast_select_render: selector heading + per-match sub-headings + code."""
+
+    def test_returns_single_row(self, workflows_macros):
+        rows = workflows_macros.execute(
+            "SELECT * FROM ast_select_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchall()
+        assert len(rows) == 1
+
+    def test_starts_with_selector_heading(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM ast_select_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        md_text = row[0]
+        # The selector should appear as the first level-1 heading,
+        # wrapped in backticks
+        first_line = md_text.lstrip().split("\n", 1)[0]
+        assert first_line.startswith("# ")
+        assert "`.func`" in first_line
+
+    def test_has_level_2_headings_per_match(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM ast_select_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        md_text = row[0]
+        # At least one level-2 heading per match
+        assert "## " in md_text
+        # Sub-heading format: "<symbol> — <file>:<start>-<end>"
+        assert "—" in md_text
+
+    def test_contains_fenced_code_blocks(self, workflows_macros):
+        row = workflows_macros.execute(
+            "SELECT * FROM ast_select_render(?, '.func')",
+            [f"{PROJECT_ROOT}/fledgling/connection.py"],
+        ).fetchone()
+        assert "```python" in row[0]

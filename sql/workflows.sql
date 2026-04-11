@@ -242,3 +242,139 @@ CREATE OR REPLACE MACRO search_query(
         doc_sections: docs.items
     } AS result
     FROM defs, calls, docs;
+
+-- pss_render: Render selector query results as markdown.
+-- For each match from ast_select(source, selector), emits two blocks:
+-- a level-1 heading with file:start-end, and a fenced code block with
+-- the match's peek (AST preview — typically the signature/declaration
+-- line for function and class definitions).
+--
+-- Depends on: sitting_duck (ast_select), markdown (duck_blocks_to_md).
+--
+-- NOTE on code content: this macro uses the `peek` column from ast_select
+-- rather than ast_get_source(file_path, start_line, end_line). The latter
+-- wraps read_text() (a C++ table function) which rejects column-reference
+-- arguments due to DuckDB's lateral-join constraint (CLAUDE.md quirk #10).
+-- Passing per-row file_path to ast_get_source fails with
+-- "Table function read_text does not support lateral join column parameters".
+-- A future Python-side helper or a DuckDB/sitting_duck upgrade is needed
+-- for full-body extraction. peek is a reasonable MVP for signature-level
+-- rendering (function declarations, class headers, etc.).
+--
+-- Examples:
+--   SELECT * FROM pss_render('**/*.py', '.func');
+--   SELECT * FROM pss_render('src/main.py', '.class:has(.func#validate)');
+CREATE OR REPLACE MACRO pss_render(source, selector) AS TABLE
+    WITH matches AS (
+        SELECT
+            file_path,
+            start_line,
+            end_line,
+            COALESCE(language, 'text') AS language,
+            peek AS source_text,
+            row_number() OVER (ORDER BY file_path, start_line) AS ord
+        FROM ast_select(source, selector)
+    ),
+    blocks AS (
+        SELECT
+            {
+                'kind': 'heading',
+                'element_type': 'heading',
+                'content': m.file_path || ':' || m.start_line || '-' || m.end_line,
+                'level': 1,
+                'encoding': 'plain',
+                'attributes': MAP(),
+                'element_order': CAST(m.ord AS INTEGER) * 2 - 1
+            }::STRUCT(kind VARCHAR, element_type VARCHAR, "content" VARCHAR, "level" INTEGER, "encoding" VARCHAR, attributes MAP(VARCHAR, VARCHAR), element_order INTEGER) AS block
+        FROM matches m
+        UNION ALL
+        SELECT
+            {
+                'kind': 'code',
+                'element_type': 'code',
+                'content': m.source_text,
+                'level': 0,
+                'encoding': 'plain',
+                'attributes': MAP{'language': m.language},
+                'element_order': CAST(m.ord AS INTEGER) * 2
+            }::STRUCT(kind VARCHAR, element_type VARCHAR, "content" VARCHAR, "level" INTEGER, "encoding" VARCHAR, attributes MAP(VARCHAR, VARCHAR), element_order INTEGER)
+        FROM matches m
+    )
+    SELECT duck_blocks_to_md(ARRAY_AGG(block ORDER BY block.element_order)) AS result
+    FROM blocks;
+
+-- ast_select_render: Render selector query results grouped under a
+-- selector heading with per-match sub-headings.
+--
+-- Layout:
+--   # `<selector>`
+--   ## <qualified_name or name> — file:start-end
+--   ```<language>
+--   <peek>
+--   ```
+--   (repeated per match)
+--
+-- Matches lackpy's AstSelectInterpreter output format. Differs from
+-- pss_render by grouping all matches under one selector heading and
+-- using per-match sub-headings with the symbol name.
+--
+-- Depends on: sitting_duck (ast_select), markdown (duck_blocks_to_md).
+--
+-- Same peek-vs-ast_get_source constraint as pss_render. See its comment
+-- for the full explanation of DuckDB quirk #10 and the future path to
+-- full-body extraction.
+--
+-- Examples:
+--   SELECT * FROM ast_select_render('**/*.py', '.func#validate');
+--   SELECT * FROM ast_select_render('src/**/*.py', '.class');
+CREATE OR REPLACE MACRO ast_select_render(source, selector) AS TABLE
+    WITH matches AS (
+        SELECT
+            file_path,
+            start_line,
+            end_line,
+            COALESCE(language, 'text') AS language,
+            COALESCE(qualified_name, name, '(anonymous)') AS symbol,
+            peek AS source_text,
+            row_number() OVER (ORDER BY file_path, start_line) AS ord
+        FROM ast_select(source, selector)
+    ),
+    blocks AS (
+        -- Selector heading at element_order 0 (sorts first)
+        SELECT
+            {
+                'kind': 'heading',
+                'element_type': 'heading',
+                'content': '`' || selector || '`',
+                'level': 1,
+                'encoding': 'plain',
+                'attributes': MAP(),
+                'element_order': 0
+            }::STRUCT(kind VARCHAR, element_type VARCHAR, "content" VARCHAR, "level" INTEGER, "encoding" VARCHAR, attributes MAP(VARCHAR, VARCHAR), element_order INTEGER) AS block
+        UNION ALL
+        SELECT
+            {
+                'kind': 'heading',
+                'element_type': 'heading',
+                'content': m.symbol || ' — ' || m.file_path || ':' || m.start_line || '-' || m.end_line,
+                'level': 2,
+                'encoding': 'plain',
+                'attributes': MAP(),
+                'element_order': CAST(m.ord AS INTEGER) * 2
+            }::STRUCT(kind VARCHAR, element_type VARCHAR, "content" VARCHAR, "level" INTEGER, "encoding" VARCHAR, attributes MAP(VARCHAR, VARCHAR), element_order INTEGER)
+        FROM matches m
+        UNION ALL
+        SELECT
+            {
+                'kind': 'code',
+                'element_type': 'code',
+                'content': m.source_text,
+                'level': 0,
+                'encoding': 'plain',
+                'attributes': MAP{'language': m.language},
+                'element_order': CAST(m.ord AS INTEGER) * 2 + 1
+            }::STRUCT(kind VARCHAR, element_type VARCHAR, "content" VARCHAR, "level" INTEGER, "encoding" VARCHAR, attributes MAP(VARCHAR, VARCHAR), element_order INTEGER)
+        FROM matches m
+    )
+    SELECT duck_blocks_to_md(ARRAY_AGG(block ORDER BY block.element_order)) AS result
+    FROM blocks;
