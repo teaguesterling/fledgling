@@ -200,3 +200,174 @@ class TestModuleLevel:
         with pytest.raises(AttributeError):
             from fledgling import tools
             tools.nonexistent_macro_xyz
+
+
+# ── Delta 1: MCP registry vs catalog discovery ───────────────────────
+#
+# Tests here use raw `duckdb.connect()` with inline CREATE MACRO so they
+# don't depend on the fledgling module list (which loads code.sql and can
+# fail in environments without sitting_duck's ast_select). They isolate
+# the discovery logic itself.
+
+
+class TestCatalogFallback:
+    """Tools falls back to duckdb_functions() scan when the MCP registry
+    isn't available (older duckdb_mcp, not loaded, or no publications)."""
+
+    def test_fallback_discovers_table_macros(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_public_alpha() AS TABLE SELECT 1 AS x")
+        raw.execute("CREATE MACRO t_public_beta() AS TABLE SELECT 2 AS y")
+        tools = Tools(raw)
+        assert tools._source == "catalog"
+        assert "t_public_alpha" in tools._macros
+        assert "t_public_beta" in tools._macros
+
+    def test_fallback_excludes_underscore_prefix(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_public() AS TABLE SELECT 1")
+        raw.execute("CREATE MACRO _t_internal() AS TABLE SELECT 2")
+        tools = Tools(raw)
+        assert "t_public" in tools._macros
+        assert "_t_internal" not in tools._macros
+
+    def test_fallback_has_no_descriptions(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_undocumented() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        assert tools._descriptions == {}
+
+    def test_fallback_wrapper_docstring_basic(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_bare() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        call = tools.t_bare
+        # No description → baseline docstring
+        assert "Call t_bare" in call.__doc__
+        assert "DuckDBPyRelation" in call.__doc__
+
+    def test_list_method_includes_description_key(self):
+        """The list() method returns dicts with a 'description' key
+        (may be None in fallback mode)."""
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_listed() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        items = tools.list()
+        # DuckDB's builtin table macros (duckdb_logs_parsed, histogram,
+        # histogram_values) also appear in the main schema, so we assert
+        # on the presence of our macro rather than the total count.
+        by_name = {item["name"]: item for item in items}
+        assert "t_listed" in by_name
+        item = by_name["t_listed"]
+        assert "description" in item
+        assert item["description"] is None
+
+
+class TestMCPRegistryDetection:
+    """Feature detection for the MCP publication registry path.
+
+    The curated path requires duckdb_mcp >= b1eb63d (no-arg mcp_list_tools()
+    table function). In the current Python environment the installed build
+    is f77fb34 (DuckDB 1.4.4), which does NOT have that overload, so these
+    tests verify the detection correctly returns False and falls back.
+    """
+
+    def test_detection_returns_none_without_duckdb_mcp(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_x() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        # duckdb_mcp not loaded → feature detection returns None
+        assert tools._try_mcp_registry() is None
+        assert tools._source == "catalog"
+
+    def test_detection_returns_none_with_scalar_only_mcp_list_tools(self):
+        """When duckdb_mcp is loaded but only has scalar mcp_list_tools(VARCHAR)
+        overloads (no no-arg table function), feature detection returns None."""
+        raw = duckdb.connect()
+        try:
+            raw.execute("LOAD duckdb_mcp")
+        except Exception:
+            pytest.skip("duckdb_mcp not installed")
+
+        # Confirm the environment matches expectations: no zero-arg overload
+        has_noarg = raw.execute(
+            "SELECT 1 FROM duckdb_functions() "
+            "WHERE function_name = 'mcp_list_tools' AND len(parameters) = 0 "
+            "LIMIT 1"
+        ).fetchone()
+        if has_noarg is not None:
+            pytest.skip(
+                "environment has no-arg mcp_list_tools(); this test exercises "
+                "the pre-b1eb63d path"
+            )
+
+        raw.execute("CREATE MACRO t_x() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        assert tools._try_mcp_registry() is None
+        assert tools._source == "catalog"
+
+
+class TestMacroCallDescription:
+    """_MacroCall carries a description into __doc__ when supplied."""
+
+    def test_description_in_docstring(self):
+        from fledgling.tools import _MacroCall
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_described() AS TABLE SELECT 1")
+        call = _MacroCall(
+            raw,
+            "t_described",
+            [],
+            description="Find all the things.",
+        )
+        assert "Find all the things" in call.__doc__
+        assert "Call t_described" in call.__doc__
+
+    def test_no_description_baseline_docstring(self):
+        from fledgling.tools import _MacroCall
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_plain() AS TABLE SELECT 1")
+        call = _MacroCall(raw, "t_plain", [])
+        assert "Call t_plain" in call.__doc__
+        # No extra description text before "Call"
+        assert call.__doc__.lstrip().startswith("Call")
+
+
+class TestMacroNameExtraction:
+    """_extract_macro_name parses tool sql_template → macro name."""
+
+    def test_simple_select_from(self):
+        from fledgling.tools import _extract_macro_name
+        sql = "SELECT * FROM find_definitions($file, $name)"
+        assert _extract_macro_name(sql) == "find_definitions"
+
+    def test_multiline_with_whitespace(self):
+        from fledgling.tools import _extract_macro_name
+        sql = """SELECT * FROM
+                    code_structure(
+                        $file_pattern
+                    )"""
+        assert _extract_macro_name(sql) == "code_structure"
+
+    def test_cte_before_from_extracts_first_match(self):
+        """When a template uses CTEs with FROM clauses, the first FROM wins.
+        This is acceptable for fledgling's tool publications which are
+        almost always a plain SELECT * FROM macro(...) pattern."""
+        from fledgling.tools import _extract_macro_name
+        sql = """WITH a AS (SELECT * FROM base_macro(x))
+                 SELECT * FROM wrapper_macro(y)"""
+        assert _extract_macro_name(sql) == "base_macro"
+
+    def test_case_insensitive(self):
+        from fledgling.tools import _extract_macro_name
+        sql = "select * from MyMacro()"
+        assert _extract_macro_name(sql) == "MyMacro"
+
+    def test_no_from_returns_none(self):
+        from fledgling.tools import _extract_macro_name
+        assert _extract_macro_name("SELECT 1 AS x") is None
+
+    def test_empty_returns_none(self):
+        from fledgling.tools import _extract_macro_name
+        assert _extract_macro_name("") is None
+        assert _extract_macro_name(None) is None

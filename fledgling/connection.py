@@ -477,12 +477,11 @@ class Connection:
         con.find_definitions("**/*.py").show()
         con.recent_changes(5).limit(3).df()
 
-    The full Tools object is available at ``con._tools``.
-
-    TODO: When duckdb_mcp#62 lands (MCP state as queryable tables), switch
-    `Tools._discover()` from `duckdb_functions()` introspection to the MCP
-    publication registry so the proxy only exposes curated user-facing
-    tools, with descriptions and parameter schemas from the tool publications.
+    The full Tools object is available at ``con._tools``. Tools uses the
+    MCP publication registry (via duckdb_mcp's `mcp_list_tools()` table
+    function) to expose only curated user-facing macros with descriptions,
+    falling back to a full catalog scan when the registry is unavailable
+    (older duckdb_mcp, duckdb_mcp not loaded, zero publications).
     """
 
     def __init__(self, con: duckdb.DuckDBPyConnection):
