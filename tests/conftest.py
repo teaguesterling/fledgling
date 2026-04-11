@@ -199,6 +199,8 @@ V1_TOOLS = [
     "FindDefinitions",
     "CodeStructure",
     "FindInAST",
+    "FindCode",
+    "ViewCode",
     "MDSection",
     "MDOverview",
     "GitDiffSummary",
@@ -209,6 +211,10 @@ V1_TOOLS = [
     "ChatSearch",
     "ChatToolUsage",
     "ChatDetail",
+    "ExploreProject",
+    "InvestigateSymbol",
+    "ReviewChanges",
+    "SearchProject",
 ]
 
 
@@ -411,6 +417,7 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     load_sql(con, "docs.sql")
     load_sql(con, "repo.sql")
     load_sql(con, "structural.sql")
+    load_sql(con, "workflows.sql")
     # Conversation data: set conversations_root so the bootstrap in
     # conversations.sql can call glob() without a NULL argument.
     # conversations.sql uses CREATE TABLE IF NOT EXISTS, so the pre-created
@@ -431,6 +438,7 @@ def _create_mcp_server(profile, conv_jsonl_path=None):
     con.execute("LOAD duckdb_mcp")
     for tool_file in ["tools/files.sql", "tools/code.sql",
                       "tools/docs.sql", "tools/git.sql",
+                      "tools/workflows.sql",
                       "tools/conversations.sql",
                       "tools/help.sql"]:
         try:
