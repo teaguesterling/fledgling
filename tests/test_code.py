@@ -80,9 +80,6 @@ class TestFindImports:
         assert len(rows) > 0
 
     def test_finds_known_imports(self, code_macros):
-        # NOTE: sitting_duck has a bug where import names are empty
-        # (see https://github.com/teaguesterling/sitting_duck/issues/23)
-        # so we check import_statement (peek) instead of name
         rows = code_macros.execute(
             "SELECT import_statement FROM find_imports(?)", [CONFTEST_PATH]
         ).fetchall()
@@ -314,7 +311,7 @@ class TestFunctionCallers:
         ).fetchall()
         col_names = [r[0] for r in desc]
         assert col_names == [
-            "file_path", "call_line", "caller_name", "caller_kind",
+            "file_path", "call_line", "caller_name",
         ]
 
     def test_caller_is_enclosing_function(self, code_macros):

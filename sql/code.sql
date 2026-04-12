@@ -71,6 +71,41 @@ CREATE OR REPLACE MACRO find_imports(file_pattern) AS TABLE
     WHERE is_import(semantic_type)
     ORDER BY file_path, start_line;
 
+-- find_imports_structured: Structured import analysis via ast_imports.
+-- Returns (module, name, kind) instead of raw peek. Only captures
+-- `from X import Y` style imports — bare `import X` are not included.
+-- For comprehensive import listing, use find_imports() instead.
+--
+-- Examples:
+--   SELECT * FROM find_imports_structured('src/**/*.py');
+CREATE OR REPLACE MACRO find_imports_structured(file_pattern) AS TABLE
+    SELECT
+        file_path,
+        source_module AS module,
+        imported_name AS name,
+        import_type AS kind,
+        start_line
+    FROM ast_imports(file_pattern, NULL)
+    ORDER BY file_path, start_line;
+
+-- find_exports: Find all exported definitions (functions, classes, variables).
+-- Uses sitting_duck's ast_exports for structured output including return types
+-- and parameter signatures. Language is auto-detected.
+--
+-- Examples:
+--   SELECT * FROM find_exports('src/**/*.py');
+--   SELECT * FROM find_exports('lib/*.ts');
+CREATE OR REPLACE MACRO find_exports(file_pattern) AS TABLE
+    SELECT
+        file_path,
+        name,
+        semantic_type_to_string(semantic_type) AS kind,
+        start_line,
+        end_line,
+        peek
+    FROM ast_exports(file_pattern, NULL)
+    ORDER BY file_path, start_line;
+
 -- find_in_ast: Search AST by semantic category.
 -- Generalizes find_calls, find_imports, and other AST queries into a
 -- single parameterized search. The kind parameter maps to sitting_duck's
@@ -345,55 +380,38 @@ CREATE OR REPLACE MACRO complexity_hotspots(file_pattern, n := 20) AS TABLE
     LIMIT n;
 
 -- function_callers: Find all call sites for a named function across a codebase.
--- Answers "who calls X?" — the reverse of find_calls which shows what a file calls.
--- Groups by calling file and shows the enclosing function for each call site.
+-- Answers "who calls X?" — uses sitting_duck's ast_callers for the raw
+-- caller→callee graph and filters to the target function name.
 --
 -- Examples:
 --   SELECT * FROM function_callers('src/**/*.py', 'parse_config');
 --   SELECT * FROM function_callers('**/*.py', 'validate');
 CREATE OR REPLACE MACRO function_callers(file_pattern, func_name) AS TABLE
-    WITH calls AS (
-        SELECT
-            file_path,
-            start_line,
-            node_id
-        FROM read_ast(file_pattern)
-        WHERE is_call(semantic_type)
-          AND name = func_name
-    ),
-    enclosing AS (
-        SELECT
-            file_path,
-            name,
-            semantic_type_to_string(semantic_type) AS kind,
-            start_line AS def_start,
-            end_line AS def_end
-        FROM read_ast(file_pattern)
-        WHERE is_definition(semantic_type)
-          AND semantic_type_to_string(semantic_type) IN
-              ('DEFINITION_FUNCTION', 'DEFINITION_CLASS', 'DEFINITION_MODULE')
-          AND name != ''
-    ),
-    matched AS (
-        SELECT
-            c.file_path,
-            c.start_line AS call_line,
-            e.name AS caller_name,
-            e.kind AS caller_kind,
-            e.def_end - e.def_start AS scope_size,
-            row_number() OVER (
-                PARTITION BY c.file_path, c.start_line
-                ORDER BY e.def_end - e.def_start
-            ) AS rn
-        FROM calls c
-        LEFT JOIN enclosing e
-            ON c.file_path = e.file_path
-           AND c.start_line BETWEEN e.def_start AND e.def_end
-    )
-    SELECT file_path, call_line, caller_name, caller_kind
-    FROM matched
-    WHERE rn = 1
+    SELECT
+        file_path,
+        call_line,
+        caller AS caller_name
+    FROM ast_callers(file_pattern, NULL)
+    WHERE callee = func_name
     ORDER BY file_path, call_line;
+
+-- call_graph: Full caller→callee graph for a set of files.
+-- Returns every function call relationship. Use to understand how code
+-- connects, or filter with WHERE for specific patterns.
+--
+-- Examples:
+--   SELECT * FROM call_graph('src/**/*.py');
+--   SELECT caller, callee, count(*) FROM call_graph('src/**/*.py') GROUP BY ALL;
+--   SELECT * FROM call_graph('src/**/*.py') WHERE callee = 'execute';
+CREATE OR REPLACE MACRO call_graph(file_pattern) AS TABLE
+    SELECT
+        caller,
+        caller_line,
+        callee,
+        call_line,
+        file_path
+    FROM ast_callers(file_pattern, NULL)
+    ORDER BY file_path, caller_line;
 
 -- module_dependencies: Map internal import relationships across a codebase.
 -- Shows which modules import which, with fan-in count (how many modules
