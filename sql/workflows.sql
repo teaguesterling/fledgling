@@ -344,7 +344,7 @@ CREATE OR REPLACE MACRO ast_select_render(source, selector) AS TABLE
             start_line,
             end_line,
             COALESCE(language, 'text') AS language,
-            COALESCE(qualified_name, name, '(anonymous)') AS symbol,
+            COALESCE(ast_qualified_name_as_string(qualified_name), name, '(anonymous)') AS symbol,
             peek AS source_text,
             row_number() OVER (ORDER BY file_path, start_line) AS ord
         FROM ast_select(source, selector)
