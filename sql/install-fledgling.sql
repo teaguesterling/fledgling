@@ -17,7 +17,7 @@
 INSTALL httpfs;
 LOAD httpfs;
 
-SET VARIABLE _version = '0.7.1';
+SET VARIABLE _version = '0.8.1';
 SET VARIABLE _base = 'https://raw.githubusercontent.com/teaguesterling/fledgling/main';
 
 -- ── 2. Parse configuration ───────────────────────────────────────────
