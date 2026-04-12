@@ -69,6 +69,10 @@ class ToolInfo:
 
     Populated when the MCP publication registry is available:
         tool_name, description, sql_template, parameters_schema, required, format
+
+    Derived properties:
+        required_params — params that must be provided (from required or all params)
+        optional_params — params that have defaults (params minus required)
     """
 
     # Always available
@@ -82,6 +86,33 @@ class ToolInfo:
     parameters_schema: Optional[dict[str, Any]] = None
     required: Optional[list[str]] = None
     format: Optional[str] = None
+
+    @property
+    def required_params(self) -> list[str]:
+        """Parameters that must be provided (no default value).
+
+        When MCP metadata is available, this is the ``required`` list
+        intersected with the macro's parameter names (preserving macro
+        ordering). When MCP metadata is unavailable, returns the full
+        ``params`` list (conservative: assumes all are required).
+        """
+        if self.required is not None:
+            req_set = set(self.required)
+            return [p for p in self.params if p in req_set]
+        return list(self.params)
+
+    @property
+    def optional_params(self) -> list[str]:
+        """Parameters that have default values.
+
+        When MCP metadata is available, this is ``params`` minus
+        ``required``, preserving macro ordering. When MCP metadata
+        is unavailable, returns an empty list (conservative).
+        """
+        if self.required is not None:
+            req_set = set(self.required)
+            return [p for p in self.params if p not in req_set]
+        return []
 
 
 class Tools:

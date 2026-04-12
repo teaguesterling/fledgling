@@ -418,6 +418,45 @@ class TestToolInfo:
         assert info.format == "markdown"
         assert "file_pattern" in info.parameters_schema
 
+    def test_required_params_with_mcp(self):
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(
+            macro_name="test",
+            params=["a", "b", "c"],
+            required=["a"],
+        )
+        assert info.required_params == ["a"]
+        assert info.optional_params == ["b", "c"]
+
+    def test_required_params_preserves_macro_order(self):
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(
+            macro_name="test",
+            params=["z", "a", "m"],
+            required=["a", "z"],
+        )
+        # Order follows params, not required
+        assert info.required_params == ["z", "a"]
+        assert info.optional_params == ["m"]
+
+    def test_required_params_fallback_all_required(self):
+        """Without MCP metadata, all params are treated as required."""
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(macro_name="test", params=["x", "y"])
+        assert info.required_params == ["x", "y"]
+        assert info.optional_params == []
+
+    def test_required_params_empty(self):
+        """Macro with no required params (all optional)."""
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(
+            macro_name="test",
+            params=["a", "b"],
+            required=[],
+        )
+        assert info.required_params == []
+        assert info.optional_params == ["a", "b"]
+
 
 class TestToolsIteration:
     """Tools supports __iter__, __len__, and get()."""
