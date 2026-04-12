@@ -198,32 +198,37 @@ def match(
     Returns:
         List of MatchRegion objects with named captures.
     """
-    # Create temp table with unique name to avoid race conditions
-    table_name = f"_edit_ast_{uuid.uuid4().hex[:8]}"
-    source_param = "'full'" if columns else "'lines'"
-    con.execute(f"""
-        CREATE OR REPLACE TEMP TABLE {table_name} AS
-        SELECT * FROM read_ast(?, source={source_param})
-    """, [file_pattern])
+    # Call ast_match directly with the file pattern. Newer sitting_duck
+    # (908927e+) takes a file-pattern string as the first arg, not a temp
+    # table name. The old temp-table approach fails because ast_match now
+    # tries to open the table name as a file path.
+    rows = con.execute(
+        "SELECT match_id, file_path, start_line, end_line, peek, captures "
+        "FROM ast_match(?, ?, ?, match_by := ?, depth_fuzz := ?)",
+        [file_pattern, pattern, language, match_by, depth_fuzz],
+    ).fetchall()
+
+    # Column positions require a separate read_ast(source='full') query
+    # since ast_match doesn't return start_column/end_column.
+    col_table = None
+    if columns and rows:
+        col_table = f"_edit_ast_{uuid.uuid4().hex[:8]}"
+        con.execute(f"""
+            CREATE OR REPLACE TEMP TABLE {col_table} AS
+            SELECT file_path, start_line, start_column, end_column
+            FROM read_ast(?, source='full')
+        """, [file_pattern])
 
     try:
-        # Run ast_match
-        rows = con.execute(
-            f"SELECT match_id, file_path, start_line, end_line, peek, captures "
-            f"FROM ast_match('{table_name}', ?, ?, match_by := ?, depth_fuzz := ?)",
-            [pattern, language, match_by, depth_fuzz],
-        ).fetchall()
-
         regions = []
         for match_id, file_path, start_line, end_line, peek, captures_map in rows:
-            # Parse captures map into CapturedNode objects
             captures = _parse_captures(captures_map)
 
             sc = None
             ec = None
-            if columns:
+            if col_table:
                 col_rows = con.execute(
-                    f"SELECT start_column, end_column FROM {table_name} "
+                    f"SELECT start_column, end_column FROM {col_table} "
                     "WHERE file_path = ? AND start_line = ? LIMIT 1",
                     [file_path, start_line],
                 ).fetchall()
@@ -243,7 +248,8 @@ def match(
                 mr = mr.resolve()
             regions.append(mr)
     finally:
-        con.execute(f"DROP TABLE IF EXISTS {table_name}")
+        if col_table:
+            con.execute(f"DROP TABLE IF EXISTS {col_table}")
 
     return regions
 
