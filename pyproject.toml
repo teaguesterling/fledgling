@@ -31,8 +31,9 @@ docs = [
 fledgling = "fledgling.cli:main"
 
 [project.urls]
-Homepage = "https://teaguesterling.github.io/fledgling/"
-Documentation = "https://teaguesterling.github.io/fledgling/"
+Homepage = "https://github.com/teaguesterling/fledgling"
+Documentation = "https://fledgling.readthedocs.io"
+"SQL Builder" = "https://teaguesterling.github.io/fledgling/"
 Repository = "https://github.com/teaguesterling/fledgling"
 Issues = "https://github.com/teaguesterling/fledgling/issues"
 

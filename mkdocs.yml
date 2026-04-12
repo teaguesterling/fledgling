@@ -1,8 +1,8 @@
 site_name: Fledgling
 site_description: MCP tools that help AI agents get their bearings in a codebase
-site_url: https://source-sextant.readthedocs.io
-repo_url: https://github.com/teaguesterling/source-sextant
-repo_name: teaguesterling/source-sextant
+site_url: https://fledgling.readthedocs.io
+repo_url: https://github.com/teaguesterling/fledgling
+repo_name: teaguesterling/fledgling
 
 theme:
   name: material
@@ -28,7 +28,7 @@ theme:
 
 markdown_extensions:
   - tables
-  - admonitions
+  - admonition
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
@@ -37,9 +37,13 @@ markdown_extensions:
   - toc:
       permalink: true
 
+plugins:
+  - search
+
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - SQL Builder: https://teaguesterling.github.io/fledgling/
   - Macro Reference:
       - Source Retrieval: macros/source.md
       - Code Intelligence: macros/code.md
@@ -50,3 +54,13 @@ nav:
       - Product Spec: vision/PRODUCT_SPEC.md
       - Conversation Analysis: vision/CONVERSATION_ANALYSIS.md
       - Schema Design: vision/CONVERSATION_SCHEMA_DESIGN.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/teaguesterling/fledgling
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/fledgling-mcp/
+    - icon: material/database
+      link: https://teaguesterling.github.io/fledgling/
+      name: SQL-only builder
