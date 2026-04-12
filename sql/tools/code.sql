@@ -1,6 +1,6 @@
 -- Fledgling: Code Intelligence Tool Publications
 --
--- Publishes 5 MCP tools for AST-based code analysis.
+-- Publishes 4 MCP tools for AST-based code analysis.
 -- Macros are defined in sql/code.sql; this file only creates MCP bindings.
 --
 -- Embeds session_root at publish time (getvariable is not available
@@ -8,11 +8,11 @@
 -- and code.sql, with session_root already set.
 --
 -- Published tools:
---   FindDefinitions, CodeStructure, FindInAST, FindCode, ViewCode
+--   FindDefinitions, CodeStructure, FindCode, ViewCode
 --
 -- Macros without tool publications (use via query tool):
---   find_calls, find_imports, complexity_hotspots, function_callers,
---   module_dependencies
+--   find_in_ast, find_calls, find_imports, complexity_hotspots,
+--   function_callers, module_dependencies
 
 PRAGMA mcp_publish_tool(
     'FindDefinitions',
@@ -37,19 +37,9 @@ PRAGMA mcp_publish_tool(
     'markdown'
 );
 
-PRAGMA mcp_publish_tool(
-    'FindInAST',
-    'Search code by semantic category: calls, imports, definitions, loops, conditionals, strings, comments. More targeted than grep — finds structural patterns, not text matches. Output is grep-style: file:line  context.',
-    'SELECT printf(''%s:%d  %s'', file_path, start_line, context) AS line
-     FROM find_in_ast(
-        _resolve($file_pattern),
-        $kind,
-        COALESCE(NULLIF($name_pattern, ''null''), ''%'')
-    )',
-    '{"file_pattern": {"type": "string", "description": "Glob pattern for files (e.g. src/**/*.py)"}, "kind": {"type": "string", "description": "What to find: calls, imports, definitions, loops, conditionals, strings, comments"}, "name_pattern": {"type": "string", "description": "SQL LIKE filter on name (e.g. connect%). Default: all"}}',
-    '["file_pattern", "kind"]',
-    'text'
-);
+-- FindInAST removed — FindCode and SelectCode (in tools/workflows.sql)
+-- provide the same capability with CSS selectors. The find_in_ast macro
+-- remains available via the query tool for backwards compatibility.
 
 PRAGMA mcp_publish_tool(
     'FindCode',

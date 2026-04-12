@@ -1,6 +1,7 @@
--- Fledgling: Workflow Tool Publications
+-- Fledgling: Workflow + Rendering Tool Publications
 --
--- MCP tool publications for compound workflow query macros.
+-- MCP tool publications for compound workflow query macros and
+-- selector-based code rendering.
 -- Wraps macros from sql/workflows.sql.
 --
 -- Each macro returns a single row with one nested STRUCT column called
@@ -67,25 +68,13 @@ PRAGMA mcp_publish_tool(
 );
 
 PRAGMA mcp_publish_tool(
-    'PssRender',
-    'Render code matched by a CSS selector as markdown: file:range headings followed by fenced code blocks. Each match shows the signature line (peek) from the AST — use when you want to see what matches a selector. For full function bodies, use ViewCode.',
+    'SelectCode',
+    'Select and view code using CSS selectors over ASTs. Returns markdown with file:range headings and fenced source blocks. Selector syntax: .func for functions, .class for classes, #name for by-name, :has() / :not() for filtering, A > B for nesting. More expressive than FindDefinitions — use this when you know what structural pattern you want.',
     'SELECT * FROM pss_render(
         _resolve($source),
         $selector
     )',
-    '{"source": {"type": "string", "description": "Glob for files to search (e.g. src/**/*.py)"}, "selector": {"type": "string", "description": "CSS selector: .func, #name, :has(...), ::callers, etc."}}',
-    '["source", "selector"]',
-    'text'
-);
-
-PRAGMA mcp_publish_tool(
-    'AstSelectRender',
-    'Render selector query results grouped under a selector heading with per-match sub-headings (symbol name plus file:range). Same matches as PssRender but with a layout grouped by selector. Signature-level code blocks via AST peek.',
-    'SELECT * FROM ast_select_render(
-        _resolve($source),
-        $selector
-    )',
-    '{"source": {"type": "string", "description": "Glob for files to search (e.g. src/**/*.py)"}, "selector": {"type": "string", "description": "CSS selector: .func, #name, :has(...), ::callers, etc."}}',
+    '{"source": {"type": "string", "description": "Glob for files to search (e.g. src/**/*.py, **/*.rs)"}, "selector": {"type": "string", "description": "CSS selector: .func, .class, #name, :has(child), :not(:has(child)), A > B, A ~ B"}}',
     '["source", "selector"]',
     'text'
 );
