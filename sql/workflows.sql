@@ -265,15 +265,25 @@ CREATE OR REPLACE MACRO search_query(
 --   SELECT * FROM pss_render('**/*.py', '.func');
 --   SELECT * FROM pss_render('src/main.py', '.class:has(.func#validate)');
 CREATE OR REPLACE MACRO pss_render(source, selector) AS TABLE
-    WITH matches AS (
+    WITH raw_matches AS (
         SELECT
             file_path,
             start_line,
             end_line,
-            COALESCE(language, 'text') AS language,
-            peek AS source_text,
-            row_number() OVER (ORDER BY file_path, start_line) AS ord
+            COALESCE(language, 'text') AS language
         FROM ast_select(source, selector)
+    ),
+    matches AS (
+        SELECT
+            m.file_path,
+            m.start_line,
+            m.end_line,
+            m.language,
+            string_agg(rl.content, chr(10) ORDER BY rl.line_number) AS source_text,
+            row_number() OVER (ORDER BY m.file_path, m.start_line) AS ord
+        FROM raw_matches m, read_lines_lateral(m.file_path) rl
+        WHERE rl.line_number BETWEEN m.start_line AND m.end_line
+        GROUP BY m.file_path, m.start_line, m.end_line, m.language
     ),
     blocks AS (
         SELECT
