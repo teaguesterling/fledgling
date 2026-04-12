@@ -19,9 +19,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-pro = [
+python = [
     "duckdb>=1.5.0",
-    "fastmcp>=3.0",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -30,7 +29,6 @@ docs = [
 
 [project.scripts]
 fledgling = "fledgling.cli:main"
-fledgling-pro = "fledgling.pro.server:main"
 
 [project.urls]
 Homepage = "https://teaguesterling.github.io/fledgling/"
