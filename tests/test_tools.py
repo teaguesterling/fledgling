@@ -69,7 +69,7 @@ class TestToolsDiscovery:
     def test_list_method(self, con):
         items = con._tools.list()
         assert len(items) > 10
-        names = [i["name"] for i in items]
+        names = [i.macro_name for i in items]
         assert "find_definitions" in names
 
     def test_dir_includes_macros(self, con):
@@ -235,7 +235,9 @@ class TestCatalogFallback:
         raw = duckdb.connect()
         raw.execute("CREATE MACRO t_undocumented() AS TABLE SELECT 1")
         tools = Tools(raw)
-        assert tools._descriptions == {}
+        info = tools.get("t_undocumented")
+        assert info is not None
+        assert info.description is None
 
     def test_fallback_wrapper_docstring_basic(self):
         raw = duckdb.connect()
@@ -246,21 +248,18 @@ class TestCatalogFallback:
         assert "Call t_bare" in call.__doc__
         assert "DuckDBPyRelation" in call.__doc__
 
-    def test_list_method_includes_description_key(self):
-        """The list() method returns dicts with a 'description' key
-        (may be None in fallback mode)."""
+    def test_list_returns_tool_info(self):
+        """list() returns ToolInfo objects with all fields."""
+        from fledgling.tools import ToolInfo
         raw = duckdb.connect()
         raw.execute("CREATE MACRO t_listed() AS TABLE SELECT 1")
         tools = Tools(raw)
         items = tools.list()
-        # DuckDB's builtin table macros (duckdb_logs_parsed, histogram,
-        # histogram_values) also appear in the main schema, so we assert
-        # on the presence of our macro rather than the total count.
-        by_name = {item["name"]: item for item in items}
+        by_name = {item.macro_name: item for item in items}
         assert "t_listed" in by_name
         item = by_name["t_listed"]
-        assert "description" in item
-        assert item["description"] is None
+        assert isinstance(item, ToolInfo)
+        assert item.description is None  # fallback: no MCP metadata
 
 
 class TestMCPRegistryDetection:
@@ -308,29 +307,37 @@ class TestMCPRegistryDetection:
 
 
 class TestMacroCallDescription:
-    """_MacroCall carries a description into __doc__ when supplied."""
+    """_MacroCall carries ToolInfo description into __doc__."""
 
     def test_description_in_docstring(self):
-        from fledgling.tools import _MacroCall
+        from fledgling.tools import _MacroCall, ToolInfo
         raw = duckdb.connect()
         raw.execute("CREATE MACRO t_described() AS TABLE SELECT 1")
-        call = _MacroCall(
-            raw,
-            "t_described",
-            [],
-            description="Find all the things.",
-        )
+        info = ToolInfo(macro_name="t_described", params=[], description="Find all the things.")
+        call = _MacroCall(raw, info)
         assert "Find all the things" in call.__doc__
         assert "Call t_described" in call.__doc__
 
     def test_no_description_baseline_docstring(self):
-        from fledgling.tools import _MacroCall
+        from fledgling.tools import _MacroCall, ToolInfo
         raw = duckdb.connect()
         raw.execute("CREATE MACRO t_plain() AS TABLE SELECT 1")
-        call = _MacroCall(raw, "t_plain", [])
+        info = ToolInfo(macro_name="t_plain", params=[])
+        call = _MacroCall(raw, info)
         assert "Call t_plain" in call.__doc__
-        # No extra description text before "Call"
         assert call.__doc__.lstrip().startswith("Call")
+
+    def test_tool_info_property(self):
+        """_MacroCall exposes its ToolInfo via .tool_info property."""
+        from fledgling.tools import _MacroCall, ToolInfo
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_prop() AS TABLE SELECT 1")
+        info = ToolInfo(macro_name="t_prop", params=[], description="test",
+                        required=["a"], format="markdown")
+        call = _MacroCall(raw, info)
+        assert call.tool_info is info
+        assert call.tool_info.required == ["a"]
+        assert call.tool_info.format == "markdown"
 
 
 class TestMacroNameExtraction:
@@ -371,3 +378,93 @@ class TestMacroNameExtraction:
         from fledgling.tools import _extract_macro_name
         assert _extract_macro_name("") is None
         assert _extract_macro_name(None) is None
+
+
+# ── ToolInfo dataclass + iteration + public API ──────────────────────
+
+
+class TestToolInfo:
+    """ToolInfo dataclass and Tools iteration."""
+
+    def test_toolinfo_importable_from_fledgling(self):
+        from fledgling import ToolInfo
+        assert ToolInfo is not None
+
+    def test_toolinfo_defaults(self):
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(macro_name="test")
+        assert info.macro_name == "test"
+        assert info.params == []
+        assert info.tool_name is None
+        assert info.description is None
+        assert info.parameters_schema is None
+        assert info.required is None
+        assert info.format is None
+
+    def test_toolinfo_full(self):
+        from fledgling.tools import ToolInfo
+        info = ToolInfo(
+            macro_name="find_defs",
+            params=["file_pattern", "name_pattern"],
+            tool_name="FindDefinitions",
+            description="Find function definitions.",
+            sql_template="SELECT * FROM find_definitions(...)",
+            parameters_schema={"file_pattern": {"type": "string"}},
+            required=["file_pattern"],
+            format="markdown",
+        )
+        assert info.tool_name == "FindDefinitions"
+        assert info.required == ["file_pattern"]
+        assert info.format == "markdown"
+        assert "file_pattern" in info.parameters_schema
+
+
+class TestToolsIteration:
+    """Tools supports __iter__, __len__, and get()."""
+
+    def test_iter_yields_toolinfo(self):
+        from fledgling.tools import ToolInfo
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_iter1() AS TABLE SELECT 1")
+        raw.execute("CREATE MACRO t_iter2() AS TABLE SELECT 2")
+        tools = Tools(raw)
+        items = list(tools)
+        assert all(isinstance(item, ToolInfo) for item in items)
+        names = {item.macro_name for item in items}
+        assert "t_iter1" in names
+        assert "t_iter2" in names
+
+    def test_len(self):
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_len1() AS TABLE SELECT 1")
+        raw.execute("CREATE MACRO t_len2() AS TABLE SELECT 2")
+        tools = Tools(raw)
+        # Includes DuckDB builtins too, but at least our 2
+        assert len(tools) >= 2
+
+    def test_get_existing(self):
+        from fledgling.tools import ToolInfo
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_get() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        info = tools.get("t_get")
+        assert info is not None
+        assert isinstance(info, ToolInfo)
+        assert info.macro_name == "t_get"
+
+    def test_get_missing_returns_none(self):
+        raw = duckdb.connect()
+        tools = Tools(raw)
+        assert tools.get("nonexistent_xyz") is None
+
+    def test_for_loop(self):
+        """Can iterate in a for loop idiomatically."""
+        raw = duckdb.connect()
+        raw.execute("CREATE MACRO t_loop() AS TABLE SELECT 1")
+        tools = Tools(raw)
+        found = False
+        for tool in tools:
+            if tool.macro_name == "t_loop":
+                found = True
+                break
+        assert found

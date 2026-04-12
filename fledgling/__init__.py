@@ -17,6 +17,7 @@ from fledgling.connection import (
     apply_local_init,
     Connection,
 )
+from fledgling.tools import ToolInfo
 
 __all__ = [
     "connect",
@@ -28,5 +29,6 @@ __all__ = [
     "load_macros",
     "apply_local_init",
     "Connection",
+    "ToolInfo",
     "__version__",
 ]

@@ -9,15 +9,16 @@ Discovery strategy:
     1. **MCP publication registry (preferred)** — when duckdb_mcp exposes
        the no-arg `mcp_list_tools()` table function (present in b1eb63d+),
        query it for the curated user-facing surface. This gives wrappers
-       rich metadata: description for the docstring, plus the intentional
-       list of "user tools" chosen by tool publications. Internal helper
-       macros (anything not published) do not become wrappers.
+       rich metadata: description, parameter JSON schemas, required params,
+       output format, and the intentional list of "user tools" chosen by
+       tool publications. Internal helper macros (anything not published)
+       do not become wrappers.
 
     2. **Catalog scan (fallback)** — when the registry is unavailable
        (older duckdb_mcp, duckdb_mcp not loaded, zero publications),
        fall back to scanning `duckdb_functions()` for table_macros in
        the main schema with no leading underscore. Every table macro
-       becomes a wrapper. No descriptions.
+       becomes a wrapper. No descriptions or MCP metadata.
 
 The fallback keeps the Python API usable in any environment; the curated
 path lights up automatically when the environment supports it.
@@ -31,16 +32,23 @@ Usage::
     con.find_definitions("**/*.py").show()
     con.recent_changes(5).limit(3).df()
 
-    # Module-level (lazy default connection)
+    # Iterate over available tools
+    for tool in con._tools:
+        print(f"{tool.macro_name}: {tool.description}")
+        if tool.required:
+            print(f"  required: {tool.required}")
+
+    # Module-level for quick scripting
     from fledgling.tools import find_definitions, recent_changes
     find_definitions("**/*.py").show()
-    recent_changes(5).df()
 """
 
 from __future__ import annotations
 
+import json
 import re
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Iterator, Optional
 
 import duckdb
 
@@ -51,6 +59,31 @@ import duckdb
 _MACRO_NAME_RE = re.compile(r"\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.IGNORECASE)
 
 
+@dataclass
+class ToolInfo:
+    """Metadata about a fledgling SQL macro, optionally enriched with MCP
+    tool publication data.
+
+    Always populated (from duckdb_functions catalog):
+        macro_name, params
+
+    Populated when the MCP publication registry is available:
+        tool_name, description, sql_template, parameters_schema, required, format
+    """
+
+    # Always available
+    macro_name: str
+    params: list[str] = field(default_factory=list)
+
+    # MCP publication metadata (None when discovered via catalog fallback)
+    tool_name: Optional[str] = None
+    description: Optional[str] = None
+    sql_template: Optional[str] = None
+    parameters_schema: Optional[dict[str, Any]] = None
+    required: Optional[list[str]] = None
+    format: Optional[str] = None
+
+
 class Tools:
     """Python wrappers for fledgling SQL macros.
 
@@ -58,55 +91,59 @@ class Tools:
     callable attributes for each one. Each call returns a DuckDBPyRelation
     that can be further chained (.filter, .limit, .order, .df, .show, etc).
 
-    When duckdb_mcp's `mcp_list_tools()` no-arg table function is available
-    and has user-published tools, discovery uses that as the curated surface
-    and attaches tool descriptions to wrapper docstrings. Otherwise it falls
-    back to scanning the full duckdb_functions() catalog.
+    Iterable: ``for tool in tools`` yields :class:`ToolInfo` objects.
+    Sized: ``len(tools)`` returns the number of available macros.
     """
 
     def __init__(self, con: duckdb.DuckDBPyConnection):
         self._con = con
         self._macros: dict[str, list[str]] = {}
-        self._descriptions: dict[str, str] = {}
+        self._tool_info: dict[str, ToolInfo] = {}
         self._source: str = "unknown"  # "mcp_registry" or "catalog"
         self._discover()
 
     # ── Discovery ────────────────────────────────────────────────────
 
     def _discover(self):
-        """Populate `self._macros` from the MCP registry, or catalog as fallback."""
-        curated = self._try_mcp_registry()
+        """Populate `self._macros` and `self._tool_info` from the MCP
+        registry, or catalog as fallback."""
+        mcp_tools = self._try_mcp_registry()
         all_macros = self._read_all_table_macros()
 
-        if curated:
-            # Curated path: intersect the two sources. The macro list comes
-            # from the catalog (so we get accurate parameter names from the
-            # SQL signature); the filter comes from MCP publications (so we
-            # only expose tools the user actually published).
-            curated_names, descriptions = curated
+        if mcp_tools:
+            # Curated path: intersect MCP publications with the catalog.
+            # Macro params come from the catalog (accurate SQL signature);
+            # everything else comes from the MCP publication.
             self._macros = {
                 name: params
                 for name, params in all_macros.items()
-                if name in curated_names
+                if name in mcp_tools
             }
-            self._descriptions = descriptions
+            for name, params in self._macros.items():
+                info = mcp_tools[name]
+                info.params = params
+                self._tool_info[name] = info
             self._source = "mcp_registry"
         else:
-            # Fallback: expose all non-underscore table macros, no descriptions.
+            # Fallback: expose all non-underscore table macros, no metadata.
             self._macros = {
                 name: params
                 for name, params in all_macros.items()
                 if not name.startswith("_")
             }
-            self._descriptions = {}
+            self._tool_info = {
+                name: ToolInfo(macro_name=name, params=params)
+                for name, params in self._macros.items()
+            }
             self._source = "catalog"
 
-    def _try_mcp_registry(self) -> Optional[tuple[set[str], dict[str, str]]]:
+    def _try_mcp_registry(self) -> Optional[dict[str, ToolInfo]]:
         """Query the MCP publication registry via `mcp_list_tools()`.
 
         Returns:
-            (curated_macro_names, macro_name -> description) if the
-            registry is available and has user publications, otherwise None.
+            dict mapping macro_name → ToolInfo (without params, which are
+            filled in from the catalog later), or None if the registry
+            is unavailable.
         """
         # Feature-detect: does the no-arg mcp_list_tools() table function exist?
         try:
@@ -124,12 +161,12 @@ class Tools:
         if row is None:
             return None
 
-        # Query the registry. Filter out built-in duckdb_mcp tools
-        # (query, describe, list_tables) which aren't fledgling publications.
+        # Query the full registry. Filter out built-in duckdb_mcp tools.
         try:
             rows = self._con.execute(
                 """
-                SELECT name, description, sql_template
+                SELECT name, description, sql_template, parameters,
+                       required, format
                 FROM mcp_list_tools()
                 WHERE NOT is_builtin
                 """
@@ -138,26 +175,38 @@ class Tools:
             return None
 
         if not rows:
-            # Registry is there but no user publications — fall back to
-            # catalog rather than strand the user with an empty API.
             return None
 
-        curated: set[str] = set()
-        descriptions: dict[str, str] = {}
-        for tool_name, description, sql_template in rows:
+        result: dict[str, ToolInfo] = {}
+        for tool_name, description, sql_template, params_json, required_json, fmt in rows:
             macro_name = _extract_macro_name(sql_template)
             if macro_name is None:
                 continue
             if macro_name.startswith("_"):
                 continue
-            curated.add(macro_name)
-            if description:
-                # If two tools wrap the same macro (rare), the first description wins.
-                descriptions.setdefault(macro_name, description)
 
-        if not curated:
-            return None
-        return curated, descriptions
+            # Parse JSON strings into Python objects
+            parameters_schema = _parse_json(params_json)
+            required = _parse_json(required_json)
+            if isinstance(required, str):
+                # Sometimes the required field comes back as a raw string
+                required = _parse_json(required)
+            if not isinstance(required, list):
+                required = None
+
+            # First publication for a macro wins (rare for duplicates)
+            if macro_name not in result:
+                result[macro_name] = ToolInfo(
+                    macro_name=macro_name,
+                    tool_name=tool_name,
+                    description=description,
+                    sql_template=sql_template,
+                    parameters_schema=parameters_schema if isinstance(parameters_schema, dict) else None,
+                    required=required,
+                    format=fmt,
+                )
+
+        return result if result else None
 
     def _read_all_table_macros(self) -> dict[str, list[str]]:
         """Read every table macro in the main schema (no filtering)."""
@@ -177,13 +226,9 @@ class Tools:
     def __getattr__(self, name: str) -> _MacroCall:
         if name.startswith("_"):
             raise AttributeError(name)
-        if name in self._macros:
-            return _MacroCall(
-                self._con,
-                name,
-                self._macros[name],
-                description=self._descriptions.get(name),
-            )
+        if name in self._tool_info:
+            info = self._tool_info[name]
+            return _MacroCall(self._con, info)
         raise AttributeError(
             f"No macro '{name}'. Available: {', '.join(sorted(self._macros))}"
         )
@@ -191,16 +236,26 @@ class Tools:
     def __dir__(self):
         return sorted(set(super().__dir__()) | set(self._macros))
 
-    def list(self) -> list[dict]:
-        """List all available macros with their parameters and descriptions."""
-        return [
-            {
-                "name": name,
-                "params": params,
-                "description": self._descriptions.get(name),
-            }
-            for name, params in sorted(self._macros.items())
-        ]
+    def __iter__(self) -> Iterator[ToolInfo]:
+        """Iterate over available tools, yielding ToolInfo objects."""
+        return iter(
+            self._tool_info[name]
+            for name in sorted(self._tool_info)
+        )
+
+    def __len__(self) -> int:
+        return len(self._macros)
+
+    def list(self) -> list[ToolInfo]:
+        """List all available tools with full metadata.
+
+        Returns a list of :class:`ToolInfo` objects sorted by macro name.
+        """
+        return [self._tool_info[name] for name in sorted(self._tool_info)]
+
+    def get(self, macro_name: str) -> Optional[ToolInfo]:
+        """Get metadata for a specific macro by name, or None."""
+        return self._tool_info.get(macro_name)
 
 
 def _extract_macro_name(sql_template: Optional[str]) -> Optional[str]:
@@ -216,6 +271,16 @@ def _extract_macro_name(sql_template: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def _parse_json(value: Optional[str]) -> Any:
+    """Parse a JSON string, returning None on failure."""
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return value
+
+
 class _MacroCall:
     """Callable wrapper for a single SQL table macro.
 
@@ -225,19 +290,22 @@ class _MacroCall:
     def __init__(
         self,
         con: duckdb.DuckDBPyConnection,
-        name: str,
-        params: list[str],
-        description: Optional[str] = None,
+        info: ToolInfo,
     ):
         self._con = con
-        self._name = name
-        self._params = params
-        self._description = description
-        self.__name__ = name
-        if description:
-            self.__doc__ = f"{description}\n\nCall {name}({', '.join(params)}) → DuckDBPyRelation"
+        self._info = info
+        self._name = info.macro_name
+        self._params = info.params
+        self.__name__ = info.macro_name
+        if info.description:
+            self.__doc__ = f"{info.description}\n\nCall {info.macro_name}({', '.join(info.params)}) → DuckDBPyRelation"
         else:
-            self.__doc__ = f"Call {name}({', '.join(params)}) → DuckDBPyRelation"
+            self.__doc__ = f"Call {info.macro_name}({', '.join(info.params)}) → DuckDBPyRelation"
+
+    @property
+    def tool_info(self) -> ToolInfo:
+        """The full ToolInfo metadata for this macro."""
+        return self._info
 
     def __call__(self, *args, **kwargs) -> duckdb.DuckDBPyRelation:
         """Execute the macro and return a composable Relation.
@@ -255,9 +323,6 @@ class _MacroCall:
           .columns      — column names
           .shape        — (rows, cols) tuple
         """
-        # Build SQL using parameterized approach
-        # table_function() works for positional args but not named params,
-        # so we use con.sql() with the args properly escaped
         sql_args = []
         for val in args:
             sql_args.append(_to_sql_literal(val))
