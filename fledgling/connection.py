@@ -357,7 +357,7 @@ def connect(
     profile: str = "analyst",
     modules: Optional[list[str]] = None,
     extensions: bool = True,
-) -> duckdb.DuckDBPyConnection:
+) -> "Connection":
     """Create a DuckDB connection with fledgling macros loaded.
 
     Three modes:

@@ -10,38 +10,20 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
-import duckdb
+import fledgling
 
 
 def _make_connection():
-    """Create a DuckDB connection with sitting_duck + macros loaded."""
-    con = duckdb.connect(":memory:")
-    con.execute("LOAD sitting_duck")
-    con.execute("LOAD read_lines")
-    # Load SQL macros from the fledgling sql/ directory
-    sql_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "sql",
-    )
-    for f in ["source.sql", "code.sql"]:
-        path = os.path.join(sql_dir, f)
-        if os.path.exists(path):
-            _load_sql(con, path)
-    return con
+    """Create a fledgling-enabled DuckDB connection for the edit CLI.
 
-
-def _load_sql(con, path):
-    with open(path) as f:
-        sql = f.read()
-    lines = [l for l in sql.split("\n") if not l.strip().startswith("--")]
-    cleaned = "\n".join(lines)
-    for stmt in cleaned.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            con.execute(stmt + ";")
+    Uses fledgling.connect() for the canonical init sequence: extensions,
+    session root, macros (source + code + everything else). Replaces the
+    old hand-rolled loader that called read_ast/load_sql manually and
+    broke when code.sql referenced newer sitting_duck functions.
+    """
+    return fledgling.connect(init=False, modules=["sandbox", "source", "code"])
 
 
 def _make_editor(con):

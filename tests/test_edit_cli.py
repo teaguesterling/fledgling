@@ -3,10 +3,14 @@
 
 import os
 import subprocess
+import sys
 import pytest
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Use the same python that's running the tests, not a bare "python" which
+# may resolve to a different interpreter with stale DuckDB extensions.
+_PYTHON = sys.executable
 
 
 @pytest.fixture
@@ -19,7 +23,7 @@ def test_file(tmp_path):
 class TestCLI:
     def test_help(self):
         result = subprocess.run(
-            ["python", "-m", "fledgling.edit.cli", "--help"],
+            [_PYTHON, "-m", "fledgling.edit.cli", "--help"],
             capture_output=True, text=True, cwd=PROJECT_ROOT,
         )
         assert result.returncode == 0
@@ -27,7 +31,7 @@ class TestCLI:
 
     def test_remove_preview(self, test_file):
         result = subprocess.run(
-            ["python", "-m", "fledgling.edit.cli", "remove", test_file, "old_func"],
+            [_PYTHON, "-m", "fledgling.edit.cli", "remove", test_file, "old_func"],
             capture_output=True, text=True, cwd=PROJECT_ROOT,
         )
         assert result.returncode == 0
@@ -35,7 +39,7 @@ class TestCLI:
 
     def test_rename_preview(self, test_file):
         result = subprocess.run(
-            ["python", "-m", "fledgling.edit.cli", "rename", test_file,
+            [_PYTHON, "-m", "fledgling.edit.cli", "rename", test_file,
              "old_func", "new_func"],
             capture_output=True, text=True, cwd=PROJECT_ROOT,
         )
