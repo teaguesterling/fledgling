@@ -65,16 +65,19 @@ def con():
 
 @pytest.fixture
 def source_macros(con):
-    """Connection with read_lines extension + source macros."""
+    """Connection with read_lines + duck_tails extensions + source macros."""
     con.execute("LOAD read_lines")
+    con.execute("LOAD duck_tails")
+    con.execute(f"CREATE OR REPLACE MACRO _session_root() AS '{PROJECT_ROOT}'")
     load_sql(con, "source.sql")
     return con
 
 
 @pytest.fixture
 def code_macros(con):
-    """Connection with sitting_duck extension + code macros."""
+    """Connection with sitting_duck + read_lines extensions + code macros."""
     con.execute("LOAD sitting_duck")
+    con.execute("LOAD read_lines")
     load_sql(con, "code.sql")
     return con
 
@@ -166,7 +169,6 @@ V1_TOOLS = [
     "ReadLines",
     "FindDefinitions",
     "CodeStructure",
-    "FindInAST",
     "FindCode",
     "ViewCode",
     "MDSection",
@@ -183,8 +185,7 @@ V1_TOOLS = [
     "InvestigateSymbol",
     "ReviewChanges",
     "SearchProject",
-    "PssRender",
-    "AstSelectRender",
+    "SelectCode",
 ]
 
 

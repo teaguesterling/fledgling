@@ -33,8 +33,8 @@ CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match :=
 
 -- read_source_text: Formatted text output for read_source with line numbers.
 -- Handles git revision dispatch: if commit is provided, reads from git via
--- git_uri(); otherwise reads from the working tree. Used by the ReadLines
--- MCP tool publication.
+-- git_uri(); otherwise reads from the working tree.
+-- Requires duck_tails (for git_uri) — always available via fledgling.connect().
 --
 -- Examples:
 --   SELECT * FROM read_source_text('src/main.py');

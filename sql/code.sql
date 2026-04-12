@@ -158,16 +158,8 @@ CREATE OR REPLACE MACRO view_code(file_pattern, selector, lang := NULL, ctx := 0
         m.end_line AS match_end,
         r.line_number,
         r.content
-    FROM matches m,
-    LATERAL (
-        SELECT line_number, content
-        FROM read_lines(
-            m.file_path,
-            CAST(greatest(1, m.start_line - ctx) AS VARCHAR)
-                || '-'
-                || CAST(m.end_line + ctx AS VARCHAR)
-        )
-    ) r
+    FROM matches m, read_lines_lateral(m.file_path) r
+    WHERE r.line_number BETWEEN greatest(1, m.start_line - ctx) AND m.end_line + ctx
     ORDER BY m.file_path, m.start_line, r.line_number;
 
 -- find_code_grep: Grep-style formatted output for find_code results.
