@@ -43,9 +43,8 @@ PRAGMA mcp_publish_tool(
 
 PRAGMA mcp_publish_tool(
     'FindCode',
-    'Search code with CSS selectors. More expressive than FindDefinitions or FindInAST — compose :has, :not, ::callers, combinators. Examples: .func#validate, .func:has(.call#execute):not(:has(try)), .class > .func.',
-    'SELECT printf(''%s:%d-%d | %s | %s | %s'', file_path, start_line, end_line, COALESCE(name, ''''), kind, peek) AS line
-     FROM find_code(
+    'Search code with CSS selectors. More expressive than FindDefinitions — compose :has, :not, ::callers, combinators. Examples: .func#validate, .func:has(.call#execute):not(:has(try)), .class > .func.',
+    'SELECT * FROM find_code_grep(
         _resolve($file_pattern),
         $selector,
         NULLIF($language, ''null'')
@@ -58,18 +57,7 @@ PRAGMA mcp_publish_tool(
 PRAGMA mcp_publish_tool(
     'ViewCode',
     'View source code matched by CSS selector with optional context lines. Each match shows a header (# file:start-end) followed by numbered source lines.',
-    'SELECT printf(''%s'',
-        CASE WHEN line_number = match_start AND match_start > 1
-             THEN chr(10) || ''# '' || file_path || '':'' || match_start || ''-'' || match_end
-                  || COALESCE('' ('' || name || '')'', '''') || chr(10)
-                  || printf(''%4d| %s'', line_number, content)
-             WHEN line_number = match_start
-             THEN ''# '' || file_path || '':'' || match_start || ''-'' || match_end
-                  || COALESCE('' ('' || name || '')'', '''') || chr(10)
-                  || printf(''%4d| %s'', line_number, content)
-             ELSE printf(''%4d| %s'', line_number, content)
-        END) AS line
-     FROM view_code(
+    'SELECT * FROM view_code_text(
         _resolve($file_pattern),
         $selector,
         NULLIF($language, ''null''),

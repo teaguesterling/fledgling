@@ -364,3 +364,88 @@ CREATE OR REPLACE MACRO search_tool_inputs(search_term) AS TABLE
            CAST(tc.input AS VARCHAR) AS input_text, tc.created_at
     FROM tool_calls() tc
     WHERE CAST(tc.input AS VARCHAR) ILIKE '%' || search_term || '%';
+
+-- ── Tool-facing view macros ───────────────────────────────────────
+-- Wrap the base macros with filtering, joins, and formatting for
+-- direct use in MCP tool publications.
+
+-- browse_sessions: Filtered session list with project/date filtering.
+-- Used by ChatSessions tool.
+CREATE OR REPLACE MACRO browse_sessions(
+    project := NULL,
+    days := NULL,
+    lim := 20
+) AS TABLE
+    SELECT session_id, project_dir, slug, git_branch,
+           started_at, duration, user_messages,
+           total_tool_calls, distinct_tools_used, top_tool,
+           total_tokens, avg_cache_hit_rate
+    FROM session_summary()
+    WHERE (project IS NULL
+           OR project_dir ILIKE '%' || project || '%')
+      AND (days IS NULL
+           OR started_at >= CURRENT_TIMESTAMP::TIMESTAMP - (days || ' days')::INTERVAL)
+    ORDER BY started_at DESC
+    LIMIT lim;
+
+-- search_chat: Full-text search across conversation messages with filtering.
+-- Used by ChatSearch tool.
+CREATE OR REPLACE MACRO search_chat(
+    query,
+    role := NULL,
+    project := NULL,
+    days := NULL,
+    lim := 20
+) AS TABLE
+    SELECT sm.session_id, sm.slug, sm.role,
+           left(sm.content, 500) AS content_preview, sm.created_at
+    FROM search_messages(query) sm
+    LEFT JOIN sessions() s ON s.session_id = sm.session_id
+    WHERE (role IS NULL OR sm.role = role)
+      AND (project IS NULL
+           OR s.project_dir ILIKE '%' || project || '%')
+      AND (days IS NULL
+           OR sm.created_at >= CURRENT_TIMESTAMP::TIMESTAMP - (days || ' days')::INTERVAL)
+    ORDER BY sm.created_at DESC
+    LIMIT lim;
+
+-- browse_tool_usage: Aggregated tool usage across sessions.
+-- Used by ChatToolUsage tool.
+CREATE OR REPLACE MACRO browse_tool_usage(
+    project := NULL,
+    session_id := NULL,
+    days := NULL,
+    lim := 50
+) AS TABLE
+    SELECT tf.tool_name,
+           sum(tf.call_count) AS total_calls,
+           count(DISTINCT tf.session_id) AS sessions,
+           min(tf.first_used) AS first_used,
+           max(tf.last_used) AS last_used
+    FROM tool_frequency() tf
+    LEFT JOIN sessions() s ON s.session_id = tf.session_id
+    WHERE (project IS NULL
+           OR s.project_dir ILIKE '%' || project || '%')
+      AND (session_id IS NULL OR tf.session_id = session_id)
+      AND (days IS NULL
+           OR tf.first_used >= CURRENT_TIMESTAMP::TIMESTAMP - (days || ' days')::INTERVAL)
+    GROUP BY tf.tool_name
+    ORDER BY total_calls DESC
+    LIMIT lim;
+
+-- session_detail: Deep view of a single session with per-tool breakdown.
+-- Used by ChatDetail tool.
+CREATE OR REPLACE MACRO session_detail(sid) AS TABLE
+    SELECT s.slug, s.project_dir, s.git_branch,
+           s.started_at, s.duration,
+           s.user_messages, s.assistant_messages,
+           s.total_tokens, s.avg_cache_hit_rate,
+           s.bash_calls, s.bash_replaceable_calls,
+           tf.tool_name, tf.calls
+    FROM (SELECT * FROM session_summary() WHERE session_id = sid) s
+    LEFT JOIN (
+        SELECT session_id, tool_name, sum(call_count) AS calls
+        FROM tool_frequency() WHERE session_id = sid
+        GROUP BY session_id, tool_name
+    ) tf ON tf.session_id = s.session_id
+    ORDER BY tf.calls DESC NULLS LAST;

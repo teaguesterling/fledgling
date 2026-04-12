@@ -31,6 +31,31 @@ CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match :=
     )
     WHERE match IS NULL OR near_match > 0;
 
+-- read_source_text: Formatted text output for read_source with line numbers.
+-- Handles git revision dispatch: if commit is provided, reads from git via
+-- git_uri(); otherwise reads from the working tree. Used by the ReadLines
+-- MCP tool publication.
+--
+-- Examples:
+--   SELECT * FROM read_source_text('src/main.py');
+--   SELECT * FROM read_source_text('README.md', lines := '1-20');
+--   SELECT * FROM read_source_text('README.md', commit := 'HEAD~1');
+CREATE OR REPLACE MACRO read_source_text(
+    file_path,
+    lines := NULL,
+    ctx := 0,
+    match := NULL,
+    commit := NULL
+) AS TABLE
+    SELECT printf('%4d  %s', line_number, content) AS line
+    FROM read_source(
+        CASE WHEN commit IS NULL
+             THEN file_path
+             ELSE git_uri(_session_root(), file_path, commit)
+        END,
+        lines, ctx, match
+    );
+
 -- read_source_batch: Like read_source but includes file_path column
 -- for multi-file batch reads via glob patterns.
 --

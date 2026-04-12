@@ -40,10 +40,7 @@ PRAGMA mcp_publish_tool(
 PRAGMA mcp_publish_tool(
     'GitDiffFile',
     'Line-level unified diff of a single file between two revisions. Shows added (+), removed (-), and context lines. Use GitDiffSummary first to find changed files.',
-    'SELECT printf(''%s %s'',
-        CASE line_type WHEN ''ADDED'' THEN ''+'' WHEN ''REMOVED'' THEN ''-'' ELSE '' '' END,
-        content) AS line
-     FROM file_diff(
+    'SELECT * FROM file_diff_text(
         $file,
         $from_rev,
         $to_rev,

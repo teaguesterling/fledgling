@@ -170,6 +170,32 @@ CREATE OR REPLACE MACRO view_code(file_pattern, selector, lang := NULL, ctx := 0
     ) r
     ORDER BY m.file_path, m.start_line, r.line_number;
 
+-- find_code_grep: Grep-style formatted output for find_code results.
+-- One line per match: file:start-end | name | kind | peek
+-- Used by the FindCode MCP tool publication.
+CREATE OR REPLACE MACRO find_code_grep(file_pattern, selector, lang := NULL) AS TABLE
+    SELECT printf('%s:%d-%d | %s | %s | %s',
+                  file_path, start_line, end_line,
+                  COALESCE(name, ''), kind, COALESCE(peek, '')) AS line
+    FROM find_code(file_pattern, selector, lang);
+
+-- view_code_text: Formatted text output for view_code results.
+-- Each match gets a heading (# file:start-end (name)) followed by
+-- numbered source lines. Used by the ViewCode MCP tool publication.
+CREATE OR REPLACE MACRO view_code_text(file_pattern, selector, lang := NULL, ctx := 0) AS TABLE
+    SELECT printf('%s',
+        CASE WHEN line_number = match_start AND match_start > 1
+             THEN chr(10) || '# ' || file_path || ':' || match_start || '-' || match_end
+                  || COALESCE(' (' || name || ')', '') || chr(10)
+                  || printf('%4d| %s', line_number, content)
+             WHEN line_number = match_start
+             THEN '# ' || file_path || ':' || match_start || '-' || match_end
+                  || COALESCE(' (' || name || ')', '') || chr(10)
+                  || printf('%4d| %s', line_number, content)
+             ELSE printf('%4d| %s', line_number, content)
+        END) AS line
+    FROM view_code(file_pattern, selector, lang, ctx);
+
 -- code_structure: Get a structural overview of files with complexity metrics.
 -- Shows top-level definitions with size and complexity indicators for triage.
 -- Use this to answer "which functions are large or complex?" before reading code.

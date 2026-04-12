@@ -134,6 +134,14 @@ CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := '.') AS TABLE
     FROM lines
     WHERE length(line) > 0;
 
+-- file_diff_text: Unified diff format for file_diff results.
+-- Prefixes each line with +/- /space. Used by GitDiffFile tool publication.
+CREATE OR REPLACE MACRO file_diff_text(file, from_rev, to_rev, repo := '.') AS TABLE
+    SELECT printf('%s %s',
+        CASE line_type WHEN 'ADDED' THEN '+' WHEN 'REMOVED' THEN '-' ELSE ' ' END,
+        content) AS line
+    FROM file_diff(file, from_rev, to_rev, repo);
+
 -- working_tree_status: Detect untracked and deleted files in the working tree.
 -- Compares tracked files at HEAD against filesystem via glob(). Cannot detect
 -- content modifications — only structural changes (files present or absent).
