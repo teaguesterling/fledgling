@@ -12,13 +12,12 @@ Fledgling gives you structured, token-efficient access to the codebase you're wo
 | **FindDefinitions** | AST-based search for functions, classes, variables | `file_pattern`, `name_pattern` |
 | **FindCode** | CSS selector search: `.func`, `#name`, `:has(...)`, `::callers` | `file_pattern`, `selector` |
 | **ViewCode** | View source matched by CSS selector with context lines | `file_pattern`, `selector`, `context` |
+| **SelectCode** | Render selector matches as markdown: file:range headings + full source blocks | `source`, `selector` |
 | **CodeStructure** | Top-level overview: what's defined in each file | `file_pattern` |
 | **ExploreProject** | First-contact briefing: languages, structure, docs, recent activity | `root`, `code_pattern`, `doc_pattern` |
 | **InvestigateSymbol** | Deep dive: definitions, callers, call sites for a symbol | `name`, `file_pattern` |
 | **ReviewChanges** | Change review: files and functions ranked by complexity | `from_rev`, `to_rev`, `file_pattern` |
 | **SearchProject** | Multi-source search across definitions, calls, and docs | `pattern`, `file_pattern` |
-| **PssRender** | Render selector matches as markdown code blocks | `source`, `selector` |
-| **AstSelectRender** | Selector-grouped rendering with per-match sub-headings | `source`, `selector` |
 | **MDOverview** | Browse all docs with keyword/regex search | `file_pattern`, `search` |
 | **MDSection** | Read a markdown section by ID | `file_path`, `section_id` |
 | **GitDiffSummary** | File-level change summary between revisions | `from_rev`, `to_rev` |
@@ -208,8 +207,7 @@ Use CSS selectors to find and view code structurally:
 ```
 FindCode(file_pattern="src/**/*.py", selector=".func#validate")
 ViewCode(file_pattern="src/**/*.py", selector=".func:has(.call#execute)")
-PssRender(source="src/**/*.py", selector=".class > .func")
-AstSelectRender(source="src/**/*.py", selector=".func#main")
+SelectCode(source="src/**/*.py", selector=".class > .func")
 ```
 
 Selector syntax: `.func`, `.class`, `.call`, `.import`, `#name`, `:has(child)`, `:not(...)`, `::callers`, `::callees`, `A > B` (direct child), `A ~ B` (sibling).
@@ -243,9 +241,10 @@ All macros are available via the **query** tool.
 | `find_definitions` | `(file_pattern, name_pattern := '%')` |
 | `find_calls` | `(file_pattern, name_pattern := '%')` |
 | `find_imports` | `(file_pattern)` |
-| `find_in_ast` | `(file_pattern, kind, name_pattern := '%')` |
 | `find_code` | `(file_pattern, selector, lang := NULL)` |
+| `find_code_grep` | `(file_pattern, selector, lang := NULL)` |
 | `view_code` | `(file_pattern, selector, lang := NULL, ctx := 0)` |
+| `view_code_text` | `(file_pattern, selector, lang := NULL, ctx := 0)` |
 | `code_structure` | `(file_pattern)` |
 | `find_class_members` | `(file_path, class_node_id)` |
 | `complexity_hotspots` | `(file_pattern, n := 20)` |
@@ -360,6 +359,6 @@ Unsupported extensions fall back to CSV. For other formats, use the query tool w
 
 - Use `CodeStructure` first to understand what's in a file before reading it
 - Use `FindDefinitions` with `name_pattern` to narrow results
-- Use `FindInAST` with `kind` for targeted semantic searches (calls, imports, loops, etc.)
+- Use `FindCode` with CSS selectors for targeted structural searches (`.call#execute`, `.import`, `:has(...)`)
 - Use `ReadLines` with `lines` and `match` to read only what you need
 - Use `doc_outline()` via query before `MDSection` to find the right section
