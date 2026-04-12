@@ -36,7 +36,7 @@ def cli_init(tmp_path_factory):
         "LOAD duck_tails;",
         f"SET VARIABLE session_root = '{PROJECT_ROOT}';",
         f"SET VARIABLE conversations_root = '{workdir}';",
-        "SET VARIABLE fledgling_version = '0.7.0';",
+        "SET VARIABLE fledgling_version = '0.7.1';",
         "SET VARIABLE fledgling_profile = 'test';",
         "SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'help'];",
         f"SET VARIABLE _help_path = '{os.path.join(PROJECT_ROOT, 'SKILL.md')}';",
@@ -102,7 +102,7 @@ class TestInfo:
     def test_info(self, cli_init):
         rc, out, _ = run_cli("info", init_path=cli_init)
         assert rc == 0
-        assert "0.7.0" in out
+        assert "0.7.1" in out
         assert "test" in out  # profile
 
 
@@ -110,7 +110,7 @@ class TestVersion:
     def test_version(self, cli_init):
         rc, out, _ = run_cli("version", init_path=cli_init)
         assert rc == 0
-        assert "0.7.0" in out
+        assert "0.7.1" in out
 
 
 class TestQuery:
@@ -313,7 +313,7 @@ class TestDrFledgling:
         rc, out, _ = run_cli("dr-fledgling", init_path=cli_init)
         assert rc == 0
         assert "version" in out
-        assert "0.7.0" in out
+        assert "0.7.1" in out
 
 
 # ── Output format flags ──────────────────────────────────────────────
@@ -448,7 +448,7 @@ class TestInitResolution:
         """FLEDGLING_INIT takes precedence."""
         rc, out, _ = run_cli("info", init_path=cli_init)
         assert rc == 0
-        assert "0.7.0" in out
+        assert "0.7.1" in out
 
 
 # ── Error handling ────────────────────────────────────────────────────

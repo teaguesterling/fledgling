@@ -18,7 +18,7 @@ set -euo pipefail
 # Resolve FLEDGLING_HOME relative to this script's location
 FLEDGLING_HOME="$(cd "$(dirname "$0")/.." && pwd)"
 
-VERSION="0.7.0"
+VERSION="0.7.1"
 
 usage() {
     cat <<EOF

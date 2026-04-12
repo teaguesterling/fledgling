@@ -35,7 +35,7 @@ SET VARIABLE conversations_root = COALESCE(
 );
 
 -- Fledgling metadata (read by dr_fledgling)
-SET VARIABLE fledgling_version = '0.7.0';
+SET VARIABLE fledgling_version = '0.7.1';
 SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'workflows', 'conversations', 'help'];
 
 -- Additional allowed directories (set before this point if needed).
