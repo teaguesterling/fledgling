@@ -19,7 +19,7 @@
 |---------|-------------|---------|
 | **fledgling** | SQL macro foundation + Python connection API | `pip install fledgling-mcp` |
 | [**pluckit**](https://github.com/teaguesterling/pluckit) | Fluent Python API — CSS selectors, jQuery-style chaining, mutations | `pip install ast-pluckit` |
-| [**squawkit**](https://github.com/teaguesterling/squawkit) | MCP server with smart defaults, caching, workflows, prompts | `pip install squawkit` (coming soon) |
+| [**squackit**](https://github.com/teaguesterling/squackit) | MCP server with smart defaults, caching, workflows, prompts | `pip install squackit` (coming soon) |
 
 ## MCP Tools (20)
 

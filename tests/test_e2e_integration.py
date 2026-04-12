@@ -1,4 +1,4 @@
-"""End-to-end integration tests for fledgling + pluckit + squawkit.
+"""End-to-end integration tests for fledgling + pluckit + squackit.
 
 Tests each package independently, then the integration points between them.
 Does NOT test MCP protocol (no server start, no JSON-RPC). Focuses on the
@@ -6,7 +6,7 @@ Python API surface and cross-package macro availability.
 
 Requires all three packages installed:
   pip install fledgling-mcp ast-pluckit
-  pip install -e ~/Projects/squawkit  (or pip install squawkit)
+  pip install -e ~/Projects/squackit  (or pip install squackit)
 """
 
 import os
@@ -237,15 +237,15 @@ class TestPluckitNavigation:
 
 
 # ════════════════════════════════════════════════════════════════════
-# Part 3: squawkit standalone
+# Part 3: squackit standalone
 # ════════════════════════════════════════════════════════════════════
 
 
-class TestSquawkitDefaults:
+class TestSquackitDefaults:
     """Smart defaults inference works against the fledgling repo."""
 
     def test_infer_defaults(self):
-        from squawkit.defaults import infer_defaults
+        from squackit.defaults import infer_defaults
         import fledgling
         con = fledgling.connect(init=False, root=PROJECT_ROOT)
         defaults = infer_defaults(con, root=PROJECT_ROOT)
@@ -255,18 +255,18 @@ class TestSquawkitDefaults:
         assert "Python" in defaults.languages
 
     def test_doc_pattern_finds_docs(self):
-        from squawkit.defaults import infer_defaults
+        from squackit.defaults import infer_defaults
         import fledgling
         con = fledgling.connect(init=False, root=PROJECT_ROOT)
         defaults = infer_defaults(con, root=PROJECT_ROOT)
         assert defaults.doc_pattern.startswith("docs/")
 
 
-class TestSquawkitFormatting:
+class TestSquackitFormatting:
     """Truncation helpers work."""
 
     def test_truncate_rows(self):
-        from squawkit.formatting import _truncate_rows
+        from squackit.formatting import _truncate_rows
         rows = [(i, i * 2) for i in range(100)]
         truncated, omission = _truncate_rows(rows, 10, "test_macro")
         assert len(truncated) == 10
@@ -274,11 +274,11 @@ class TestSquawkitFormatting:
         assert "omitted" in omission
 
 
-class TestSquawkitSession:
+class TestSquackitSession:
     """Session cache and access log."""
 
     def test_cache_put_get(self):
-        from squawkit.session import SessionCache
+        from squackit.session import SessionCache
         cache = SessionCache()
         cache.put("test_tool", {"arg": "val"}, "result text", 5, ttl=60)
         entry = cache.get("test_tool", {"arg": "val"})
@@ -287,13 +287,13 @@ class TestSquawkitSession:
         assert entry.row_count == 5
 
     def test_cache_miss(self):
-        from squawkit.session import SessionCache
+        from squackit.session import SessionCache
         cache = SessionCache()
         assert cache.get("nonexistent", {}) is None
 
     def test_access_log(self):
         import duckdb
-        from squawkit.session import AccessLog
+        from squackit.session import AccessLog
         con = duckdb.connect()
         log = AccessLog(con)
         log.record("tool1", {"a": 1}, 10, cached=False, elapsed_ms=50.0)
@@ -305,11 +305,11 @@ class TestSquawkitSession:
         assert len(recent) == 2
 
 
-class TestSquawkitWorkflows:
+class TestSquackitWorkflows:
     """Compound workflow helpers produce formatted briefings."""
 
     def test_format_briefing(self):
-        from squawkit.workflows import _format_briefing
+        from squackit.workflows import _format_briefing
         md = _format_briefing("Test", [("Section A", "content a"), ("Section B", "content b")])
         assert "## Test" in md
         assert "### Section A" in md
@@ -372,22 +372,22 @@ class TestFledglingPluckitIntegration:
         assert "connect" in md
 
 
-class TestSquawkitFledglingIntegration:
-    """Squawkit uses fledgling's connection for defaults inference."""
+class TestSquackitFledglingIntegration:
+    """Squackit uses fledgling's connection for defaults inference."""
 
-    def test_squawkit_defaults_via_fledgling_connect(self):
-        """squawkit.defaults.infer_defaults works with a fledgling connection."""
+    def test_squackit_defaults_via_fledgling_connect(self):
+        """squackit.defaults.infer_defaults works with a fledgling connection."""
         import fledgling
-        from squawkit.defaults import infer_defaults
+        from squackit.defaults import infer_defaults
         con = fledgling.connect(init=False, root=PROJECT_ROOT)
         defaults = infer_defaults(con, root=PROJECT_ROOT)
         assert defaults.code_pattern == "**/*.py"
         assert len(defaults.languages) > 3
 
-    def test_squawkit_formatting_on_fledgling_data(self):
-        """squawkit's formatting helpers work on data from fledgling macros."""
+    def test_squackit_formatting_on_fledgling_data(self):
+        """squackit's formatting helpers work on data from fledgling macros."""
         import fledgling
-        from squawkit.formatting import _format_markdown_table
+        from squackit.formatting import _format_markdown_table
         con = fledgling.connect(init=False, root=PROJECT_ROOT)
         rows = con.execute(
             "SELECT hash, author, message FROM recent_changes(5)"
@@ -399,12 +399,12 @@ class TestSquawkitFledglingIntegration:
 
 
 class TestAllThreeTogether:
-    """The full stack: pluckit (with fledgling) producing data for squawkit formatting."""
+    """The full stack: pluckit (with fledgling) producing data for squackit formatting."""
 
-    def test_pluckit_find_formatted_by_squawkit(self):
-        """pluckit finds definitions, squawkit formats them."""
+    def test_pluckit_find_formatted_by_squackit(self):
+        """pluckit finds definitions, squackit formats them."""
         from pluckit import Plucker
-        from squawkit.formatting import _format_markdown_table
+        from squackit.formatting import _format_markdown_table
         p = Plucker(code=CONNECTION_PATH, repo=PROJECT_ROOT)
         sel = p.find(".func")
         rows = sel.materialize()
@@ -413,26 +413,26 @@ class TestAllThreeTogether:
         assert "| name" in md
         assert "connect" in md
 
-    def test_pluckit_connection_serves_squawkit_defaults(self):
-        """pluckit's fledgling-loaded connection serves squawkit's defaults inference."""
+    def test_pluckit_connection_serves_squackit_defaults(self):
+        """pluckit's fledgling-loaded connection serves squackit's defaults inference."""
         from pluckit import Plucker
-        from squawkit.defaults import infer_defaults
+        from squackit.defaults import infer_defaults
         p = Plucker(repo=PROJECT_ROOT)
         defaults = infer_defaults(p._ctx.db, root=PROJECT_ROOT)
         assert defaults.code_pattern == "**/*.py"
         assert "Python" in defaults.languages
 
     def test_full_stack_explore(self):
-        """pluckit's connection → fledgling's explore_query → squawkit's briefing formatter."""
+        """pluckit's connection → fledgling's explore_query → squackit's briefing formatter."""
         from pluckit import Plucker
-        from squawkit.workflows import _format_briefing
+        from squackit.workflows import _format_briefing
         p = Plucker(repo=PROJECT_ROOT)
         # Use fledgling's explore_query through pluckit's connection
         row = p._ctx.db.execute(
             "SELECT * FROM explore_query(root := ?)", [PROJECT_ROOT]
         ).fetchone()
         result = row[0]
-        # Format with squawkit's briefing helper
+        # Format with squackit's briefing helper
         sections = []
         if result["languages"]:
             lang_lines = [f"{l['language']}: {l['file_count']} files" for l in result["languages"][:5]]

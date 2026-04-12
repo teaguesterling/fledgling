@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-10
 **Status:** Design agreed (brainstorm). Implementation plan pending.
-**Scope:** Changes to fledgling itself. squawkit and pluckit slices are in separate specs.
+**Scope:** Changes to fledgling itself. squackit and pluckit slices are in separate specs.
 
 ## Context
 
@@ -17,19 +17,19 @@ Layer 0   DuckDB extensions (sitting_duck, markdown, webbed, read_lines, ...)
 Layer 1   fledgling              — SQL macros, language-agnostic
 Layer 2   fledgling-python       — thin Python bundler over fledgling
 Layer 3a  pluckit                — fluent Python API (jQuery-like, stateless)
-Layer 3b  squawkit               — stateful MCP server + intelligence layer
+Layer 3b  squackit               — stateful MCP server + intelligence layer
 Layer 4   Consumers              — lackpy, agents, kibitzers, notebook users
 ```
 
-Dependencies are strictly downward. No layer skips. squawkit depends on pluckit; pluckit depends on fledgling-python; fledgling-python bundles fledgling's SQL files.
+Dependencies are strictly downward. No layer skips. squackit depends on pluckit; pluckit depends on fledgling-python; fledgling-python bundles fledgling's SQL files.
 
-**Organizing rule.** Composition of primitives via SQL → fledgling macro (language-agnostic). Requires C++ for correctness or performance → DuckDB extension. Python code wrapping SQL for Python consumers → fledgling-python or pluckit. Stateful, opinionated, or MCP-protocol-bound → squawkit.
+**Organizing rule.** Composition of primitives via SQL → fledgling macro (language-agnostic). Requires C++ for correctness or performance → DuckDB extension. Python code wrapping SQL for Python consumers → fledgling-python or pluckit. Stateful, opinionated, or MCP-protocol-bound → squackit.
 
 ## Changes inside fledgling
 
 ### 1. New SQL workflow macros
 
-Six new composed macros land in fledgling. Each is pure SQL — composition of existing primitives. They become the *query* half of what `fledgling/pro/workflows.py` currently does in Python. The *workflow* half (cache, formatting, hints, session state) moves to squawkit as Python wrappers.
+Six new composed macros land in fledgling. Each is pure SQL — composition of existing primitives. They become the *query* half of what `fledgling/pro/workflows.py` currently does in Python. The *workflow* half (cache, formatting, hints, session state) moves to squackit as Python wrappers.
 
 | Macro | Composes | Purpose |
 |---|---|---|
@@ -45,7 +45,7 @@ Six new composed macros land in fledgling. Each is pure SQL — composition of e
 - Tool publications: `sql/tools/workflows.sql`
 - Tests: `tests/test_workflows.py`
 
-**Return shape.** Each `*_query` macro returns a single row with nested `LIST`/`STRUCT` columns — one struct field per composed section (e.g. `{ languages: LIST, top_defs: LIST, docs: LIST, recent: LIST }`). DuckDB handles this cleanly, and squawkit's Python wrapper unpacks the struct into the briefing format. UNION-with-discriminator and multi-result-set were considered and rejected (UNION breaks column heterogeneity; multi-result-set is not idiomatic in DuckDB table macros).
+**Return shape.** Each `*_query` macro returns a single row with nested `LIST`/`STRUCT` columns — one struct field per composed section (e.g. `{ languages: LIST, top_defs: LIST, docs: LIST, recent: LIST }`). DuckDB handles this cleanly, and squackit's Python wrapper unpacks the struct into the briefing format. UNION-with-discriminator and multi-result-set were considered and rejected (UNION breaks column heterogeneity; multi-result-set is not idiomatic in DuckDB table macros).
 
 **Out of scope.** Multi-rule pss sheets (selector table + iteration) and HTML rendering via the `webbed` extension. Both noted in lackpy's reorg-prep doc as follow-up. `pss_render`'s multi-format (`format := 'markdown' | 'html'`) can be deferred until the `webbed` integration is validated.
 
@@ -115,22 +115,22 @@ fledgling.configure(con, profile='analyst', modules=['source', 'code'], session_
 
 ### 3. Dissolve `fledgling/pro/`
 
-Once squawkit exists and absorbs the relevant modules, `fledgling/pro/` is deleted. The mapping:
+Once squackit exists and absorbs the relevant modules, `fledgling/pro/` is deleted. The mapping:
 
 | Current file | New home | Notes |
 |---|---|---|
 | `db.py` | **fledgling-python** | Near-duplicate of `connection.py` — unified in extraction, not migrated as a separate file. |
-| `defaults.py` | **squawkit/defaults.py** | Project inference is squawkit's job. |
-| `formatting.py` | **squawkit/formatting.py** | Truncation and briefing assembly. |
-| `workflows.py` | **split** | Query composition → SQL macros (section 1). Workflow objects (cache, formatting, hints) → `squawkit/workflows.py`. |
-| `session.py` | **squawkit/session.py** | Plus persistence to disk for lackpy kibitzer consumption. |
-| `prompts.py` | **squawkit/prompts.py** | MCP prompt templates. |
-| `server.py` | **squawkit/server.py** | FastMCP server wiring. |
-| `__main__.py` | **squawkit/__main__.py** | Entry point. |
+| `defaults.py` | **squackit/defaults.py** | Project inference is squackit's job. |
+| `formatting.py` | **squackit/formatting.py** | Truncation and briefing assembly. |
+| `workflows.py` | **split** | Query composition → SQL macros (section 1). Workflow objects (cache, formatting, hints) → `squackit/workflows.py`. |
+| `session.py` | **squackit/session.py** | Plus persistence to disk for lackpy kibitzer consumption. |
+| `prompts.py` | **squackit/prompts.py** | MCP prompt templates. |
+| `server.py` | **squackit/server.py** | FastMCP server wiring. |
+| `__main__.py` | **squackit/__main__.py** | Entry point. |
 
-**Tests:** `tests/test_pro_*.py` either move to squawkit or are deleted if their behavior is covered by squawkit's own tests.
+**Tests:** `tests/test_pro_*.py` either move to squackit or are deleted if their behavior is covered by squackit's own tests.
 
-**Packaging:** the `fledgling-mcp[pro]` extra is removed from fledgling's `pyproject.toml`. Users who want the intelligence layer install `squawkit` directly.
+**Packaging:** the `fledgling-mcp[pro]` extra is removed from fledgling's `pyproject.toml`. Users who want the intelligence layer install `squackit` directly.
 
 ## Migration order (sketch)
 
@@ -139,18 +139,18 @@ Full cross-repo sequencing belongs in the implementation plan. Rough order:
 1. **Land new SQL workflow macros in fledgling** (section 1). Backwards-compatible — no other repo sees a change.
 2. **Land `connection.py`/`tools.py` refinements** (section 2 deltas 1–5). Backwards-compatible — existing `fledgling.connect()` callers keep working; the proxy gains new capabilities.
 3. **Extract `fledgling-python` as its own repo/package.** Fledgling starts depending on it. `fledgling.connect()` becomes a re-export from `fledgling_python.connect()`.
-4. **Create squawkit** (see squawkit design spec). Depends on `fledgling-python` transitively via pluckit.
-5. **Remove `fledgling/pro/` from fledgling.** The `[pro]` extra stops existing; users migrate to installing `squawkit` directly.
+4. **Create squackit** (see squackit design spec). Depends on `fledgling-python` transitively via pluckit.
+5. **Remove `fledgling/pro/` from fledgling.** The `[pro]` extra stops existing; users migrate to installing `squackit` directly.
 
-Between steps 4 and 5, `fledgling[pro]` and `squawkit` exist in parallel. This is deliberate — it lets consumers migrate at their own pace rather than flipping the world at once.
+Between steps 4 and 5, `fledgling[pro]` and `squackit` exist in parallel. This is deliberate — it lets consumers migrate at their own pace rather than flipping the world at once.
 
 ## Open questions
 
-- **Access log persistence format.** Where squawkit writes the access log affects whether lackpy's kibitzer can consume it easily. Decided in the squawkit spec (DuckDB file at `~/.squawkit/sessions/<session_id>.duckdb`); noted here because it's a cross-package assumption.
+- **Access log persistence format.** Where squackit writes the access log affects whether lackpy's kibitzer can consume it easily. Decided in the squackit spec (DuckDB file at `~/.squackit/sessions/<session_id>.duckdb`); noted here because it's a cross-package assumption.
 - **Version floor for pluckit adopting fledgling-python.** Pluckit's spec will pin a minimum fledgling-python version that includes the new SQL workflow macros. TBD until first release.
 
 ## Cross-references
 
-- **squawkit design:** `~/Projects/squawkit/docs/superpowers/specs/2026-04-10-squawkit-design.md`
+- **squackit design:** `~/Projects/squackit/docs/superpowers/specs/2026-04-10-squackit-design.md`
 - **pluckit integration:** `~/Projects/pluckit/main/docs/superpowers/specs/2026-04-10-fledgling-python-integration-design.md`
 - **lackpy reorg-prep (anticipatory):** `~/Projects/lackpy/trees/feature/interpreter-plugins/docs/superpowers/specs/2026-04-10-sql-macro-reorg-prep.md`

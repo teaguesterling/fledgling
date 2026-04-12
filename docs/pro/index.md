@@ -1,10 +1,10 @@
 # Fledgling Pro (Deprecated)
 
-> **This package has been superseded by [squawkit](https://github.com/teaguesterling/squawkit).**
+> **This package has been superseded by [squackit](https://github.com/teaguesterling/squackit).**
 >
-> The `fledgling-mcp[pro]` extra and `fledgling-pro` command have been removed as of v0.7.1. The FastMCP coordination layer — smart defaults, caching, workflows, prompts, resources, and session state — now lives in the standalone [squawkit](https://github.com/teaguesterling/squawkit) package (*Semi-QUalified Agent Wingman Kit*).
+> The `fledgling-mcp[pro]` extra and `fledgling-pro` command have been removed as of v0.7.1. The FastMCP coordination layer — smart defaults, caching, workflows, prompts, resources, and session state — now lives in the standalone [squackit](https://github.com/teaguesterling/squackit) package (*Semi-QUalified Agent Companion Kit*).
 >
-> **Migration:** `pip install squawkit` instead of `pip install fledgling-mcp[pro]`. The `squawkit` command replaces `fledgling-pro`. The underlying SQL macros (workflow queries, rendering) remain in fledgling and are shared by both pluckit and squawkit.
+> **Migration:** `pip install squackit` instead of `pip install fledgling-mcp[pro]`. The `squackit` command replaces `fledgling-pro`. The underlying SQL macros (workflow queries, rendering) remain in fledgling and are shared by both pluckit and squackit.
 
 ---
 
@@ -15,9 +15,9 @@
 Fledgling Pro wrapped the same DuckDB macros as the pure-SQL MCP server but added intelligence: smart defaults, token awareness, compound workflows, session caching, and prompt templates.
 
 ```bash
-# DEPRECATED — use squawkit instead
-pip install squawkit
-squawkit                         # start MCP server
+# DEPRECATED — use squackit instead
+pip install squackit
+squackit                         # start MCP server
 ```
 
 ## Why Pro?

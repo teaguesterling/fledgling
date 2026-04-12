@@ -152,13 +152,13 @@ Fledgling is the SQL macro foundation. Two companion packages build on it:
 | Package | What it does | Install |
 |---------|-------------|---------|
 | [**pluckit**](https://github.com/teaguesterling/pluckit) | Fluent Python API — CSS selectors over ASTs, jQuery-style chaining, code mutations | `pip install ast-pluckit` |
-| [**squawkit**](https://github.com/teaguesterling/squawkit) | MCP server with smart defaults, caching, workflows, prompts, and session state | `pip install squawkit` (coming soon) |
+| [**squackit**](https://github.com/teaguesterling/squackit) | MCP server with smart defaults, caching, workflows, prompts, and session state | `pip install squackit` (coming soon) |
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│  squawkit (FastMCP)                     │  pip install squawkit
+│  squackit (FastMCP)                     │  pip install squackit
 │  Smart defaults, caching, workflows,    │
 │  prompts, kibitzer, resources           │
 │                                         │
@@ -178,7 +178,7 @@ Fledgling is the SQL macro foundation. Two companion packages build on it:
 └─────────────────────────────────────────┘
 ```
 
-Dependencies flow strictly downward. Fledgling has no dependency on pluckit or squawkit. Pluckit has an optional soft-dep on fledgling. Squawkit depends on pluckit.
+Dependencies flow strictly downward. Fledgling has no dependency on pluckit or squackit. Pluckit has an optional soft-dep on fledgling. Squackit depends on pluckit.
 
 ## Development
 
