@@ -49,14 +49,22 @@ Code analysis + git history in one call. No shell pipelines, no string parsing.
 
 ## What's Included
 
-### MCP Tools (14)
+### MCP Tools (22)
 
 | Tool | What it does |
 |------|-------------|
 | `ReadLines` | Read file lines with range, context, and match filtering |
 | `FindDefinitions` | AST-based search for functions/classes across 30 languages |
 | `FindInAST` | Semantic code search: calls, imports, loops, conditionals, strings, comments |
+| `FindCode` | CSS selector search over the AST: `.func`, `#name`, `:has(...)`, `::callers` |
+| `ViewCode` | View source matched by CSS selector with context lines |
 | `CodeStructure` | Structural overview with cyclomatic complexity metrics |
+| `ExploreProject` | First-contact briefing: languages, structure, docs, recent activity |
+| `InvestigateSymbol` | Deep dive: definitions, callers, and call sites for a symbol |
+| `ReviewChanges` | Change review: affected files and functions ranked by complexity |
+| `SearchProject` | Multi-source search across definitions, calls, and docs |
+| `PssRender` | Render CSS selector matches as markdown with file:range headings |
+| `AstSelectRender` | Selector-grouped rendering with per-match sub-headings |
 | `MDOverview` | Browse all docs with keyword/regex search |
 | `MDSection` | Read a specific markdown section by ID |
 | `GitDiffSummary` | File-level change summary between revisions |
@@ -68,7 +76,7 @@ Code analysis + git history in one call. No shell pipelines, no string parsing.
 | `ChatToolUsage` | Tool usage patterns |
 | `ChatDetail` | Deep view of a single session |
 
-Plus 20+ composable SQL macros via the query tool: `complexity_hotspots`, `function_callers`, `module_dependencies`, `structural_diff`, `doc_outline`, and more.
+Plus 30+ composable SQL macros via the query tool: `explore_query`, `investigate_query`, `review_query`, `search_query`, `pss_render`, `ast_select_render`, `find_class_members`, `complexity_hotspots`, `function_callers`, `module_dependencies`, `structural_diff`, `doc_outline`, and more.
 
 ### Fledgling Pro (FastMCP)
 
@@ -86,12 +94,26 @@ The `fledgling[pro]` package adds a FastMCP server with:
 ```python
 import fledgling
 
+# Create a connection with all macros loaded
 con = fledgling.connect()
 
 # Macros as methods — return composable DuckDB Relations
 con.find_definitions("**/*.py", name_pattern="parse%").show()
 con.recent_changes(5).select("hash, message").df()
 con.code_structure("src/**/*.py").filter("cyclomatic_complexity > 5").show()
+
+# Attach to an existing DuckDB connection
+import duckdb
+raw = duckdb.connect("my.db")
+con = fledgling.attach(raw, root="/my/project")
+
+# Compose your own init sequence
+raw = duckdb.connect()
+fledgling.load_extensions(raw)
+fledgling.set_session_root(raw, root="/my/project")
+fledgling.load_macros(raw, modules=["sandbox", "source", "code"])
+# ... do custom setup ...
+fledgling.lockdown(raw, allowed_dirs=["/my/project"])
 
 # Module-level for quick scripting
 from fledgling.tools import find_definitions, recent_changes
@@ -137,18 +159,18 @@ pip install fledgling-mcp[pro]     # + FastMCP server
 
 ```
 ┌─────────────────────────────────────────┐
-│  fledgling-pro (FastMCP)                │  pip install fledgling-mcp[pro]
-│  Smart defaults, caching, workflows,    │
+│  squawkit (FastMCP)                     │  pip install squawkit
+│  Smart defaults, caching, workflows,    │  (migrating from fledgling-mcp[pro])
 │  prompts, kibitzer, resources           │
 │                                         │
 │  ┌───────────────────────────────────┐  │
 │  │  fledgling (Python API)           │  │  pip install fledgling-mcp
-│  │  fledgling.connect()              │  │
-│  │  con.find_definitions().show()    │  │
+│  │  fledgling.connect() / attach()   │  │
+│  │  configure() / lockdown()         │  │
 │  │                                   │  │
 │  │  ┌─────────────────────────────┐  │  │
 │  │  │  SQL macros (DuckDB)        │  │  │  curl | duckdb
-│  │  │  14 MCP tools               │  │  │
+│  │  │  22 MCP tools               │  │  │
 │  │  │  read_lines, sitting_duck,  │  │  │
 │  │  │  duck_tails, duckdb_markdown│  │  │
 │  │  └─────────────────────────────┘  │  │
@@ -168,7 +190,7 @@ pip install duckdb pytest
 pytest
 ```
 
-523 tests across SQL macros, MCP integration, CLI, Python API, and FastMCP server.
+539 tests across SQL macros, MCP integration, CLI, Python API, and FastMCP server.
 
 ## Coming Soon
 

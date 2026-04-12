@@ -10,7 +10,16 @@ Fledgling gives you structured, token-efficient access to the codebase you're wo
 |------|---------|------------|
 | **ReadLines** | Read file content with line ranges, context, and match filtering | `file_path`, `lines`, `match`, `commit` |
 | **FindDefinitions** | AST-based search for functions, classes, variables | `file_pattern`, `name_pattern` |
+| **FindCode** | CSS selector search: `.func`, `#name`, `:has(...)`, `::callers` | `file_pattern`, `selector` |
+| **ViewCode** | View source matched by CSS selector with context lines | `file_pattern`, `selector`, `context` |
 | **CodeStructure** | Top-level overview: what's defined in each file | `file_pattern` |
+| **ExploreProject** | First-contact briefing: languages, structure, docs, recent activity | `root`, `code_pattern`, `doc_pattern` |
+| **InvestigateSymbol** | Deep dive: definitions, callers, call sites for a symbol | `name`, `file_pattern` |
+| **ReviewChanges** | Change review: files and functions ranked by complexity | `from_rev`, `to_rev`, `file_pattern` |
+| **SearchProject** | Multi-source search across definitions, calls, and docs | `pattern`, `file_pattern` |
+| **PssRender** | Render selector matches as markdown code blocks | `source`, `selector` |
+| **AstSelectRender** | Selector-grouped rendering with per-match sub-headings | `source`, `selector` |
+| **MDOverview** | Browse all docs with keyword/regex search | `file_pattern`, `search` |
 | **MDSection** | Read a markdown section by ID | `file_path`, `section_id` |
 | **GitDiffSummary** | File-level change summary between revisions | `from_rev`, `to_rev` |
 | **GitShow** | File content at a specific git revision | `file`, `rev` |
@@ -161,23 +170,49 @@ WHERE cyclomatic > 10 AND lines > 20;
 
 ### Explore an Unfamiliar Codebase
 
+**Quick (one call):** `ExploreProject()` — returns languages, top-complexity definitions, doc outline, and recent git activity in one structured result.
+
+**Detailed (step-by-step):**
 1. `CodeStructure(file_pattern="src/**/*.py")` — see what's defined where
 2. `ReadLines(file_path="src/main.py")` — read key files
-3. Use query tool: `SELECT * FROM doc_outline('*.md')` — find docs
+3. `MDOverview(file_pattern="*.md")` — find docs
 4. `MDSection(file_path="README.md", section_id="...")` — read relevant docs
 
 ### Understand a Function
 
+**Quick (one call):** `InvestigateSymbol(name="my_func")` — returns definitions, callers, and call sites in one result.
+
+**Detailed (step-by-step):**
 1. `FindDefinitions(file_pattern="src/**/*.py", name_pattern="my_func%")` — find it
 2. `ReadLines(file_path="src/module.py", lines="42-80")` — read implementation
 3. Use query tool: `SELECT * FROM function_callers('src/**/*.py', 'my_func')` — who calls it?
 
 ### Review Recent Changes
 
+**Quick (one call):** `ReviewChanges(from_rev="HEAD~3", to_rev="HEAD")` — returns changed files and functions ranked by complexity.
+
+**Detailed (step-by-step):**
 1. `GitDiffSummary(from_rev="HEAD~3", to_rev="HEAD")` — which files changed
 2. Use query tool: `SELECT * FROM changed_function_summary('HEAD~3', 'HEAD', 'src/**/*.py')` — what functions are affected
 3. Use query tool: `SELECT * FROM complexity_hotspots('src/**/*.py', 10)` — what's risky
 4. `ReadLines(file_path="src/changed.py", lines="42-80")` — read the changes
+
+### Search Across Sources
+
+**Quick (one call):** `SearchProject(pattern="parse%")` — searches definitions, call sites, and docs simultaneously.
+
+### View Code by Selector
+
+Use CSS selectors to find and view code structurally:
+
+```
+FindCode(file_pattern="src/**/*.py", selector=".func#validate")
+ViewCode(file_pattern="src/**/*.py", selector=".func:has(.call#execute)")
+PssRender(source="src/**/*.py", selector=".class > .func")
+AstSelectRender(source="src/**/*.py", selector=".func#main")
+```
+
+Selector syntax: `.func`, `.class`, `.call`, `.import`, `#name`, `:has(child)`, `:not(...)`, `::callers`, `::callees`, `A > B` (direct child), `A ~ B` (sibling).
 
 ### Analyze Architecture
 
@@ -209,7 +244,10 @@ All macros are available via the **query** tool.
 | `find_calls` | `(file_pattern, name_pattern := '%')` |
 | `find_imports` | `(file_pattern)` |
 | `find_in_ast` | `(file_pattern, kind, name_pattern := '%')` |
+| `find_code` | `(file_pattern, selector, lang := NULL)` |
+| `view_code` | `(file_pattern, selector, lang := NULL, ctx := 0)` |
 | `code_structure` | `(file_pattern)` |
+| `find_class_members` | `(file_path, class_node_id)` |
 | `complexity_hotspots` | `(file_pattern, n := 20)` |
 | `function_callers` | `(file_pattern, func_name)` |
 | `module_dependencies` | `(file_pattern, package_prefix)` |
@@ -220,6 +258,17 @@ All macros are available via the **query** tool.
 |-------|-----------|
 | `structural_diff` | `(file, from_rev, to_rev, repo := '.')` |
 | `changed_function_summary` | `(from_rev, to_rev, file_pattern, repo := '.')` |
+
+### Workflows
+
+| Macro | Signature |
+|-------|-----------|
+| `explore_query` | `(root := '.', code_pattern := '**/*.py', doc_pattern := 'docs/**/*.md', top_n := 20, recent_n := 10)` |
+| `investigate_query` | `(name, file_pattern := '**/*.py')` |
+| `review_query` | `(from_rev := 'HEAD~1', to_rev := 'HEAD', file_pattern := '**/*.py', repo := '.', top_n := 20)` |
+| `search_query` | `(pattern, file_pattern := '**/*.py', doc_pattern := 'docs/**/*.md', top_n := 50)` |
+| `pss_render` | `(source, selector)` |
+| `ast_select_render` | `(source, selector)` |
 
 ### Docs
 
