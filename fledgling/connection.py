@@ -146,10 +146,10 @@ def _split_sql(sql: str) -> list[str]:
 _DEFAULT_MODULES = [
     "sandbox", "dr_fledgling",
     "source", "code", "docs", "repo", "structural", "workflows",
-    "conversations", "help",
+    "conversations", "help", "fts",
 ]
 
-_DEFAULT_EXTENSIONS = ["read_lines", "sitting_duck", "markdown", "duck_tails"]
+_DEFAULT_EXTENSIONS = ["read_lines", "sitting_duck", "markdown", "duck_tails", "fts"]
 
 
 # ── Compose helpers (Delta 4) ────────────────────────────────────────
@@ -488,6 +488,42 @@ class Connection:
         from fledgling.tools import Tools
         self._con = con
         self._tools = Tools(con)
+
+    def rebuild_fts(
+        self,
+        docs_glob: str = "**/*.md",
+        code_glob: str = "**/*.py",
+        sql_dir: Optional[Path] = None,
+    ) -> None:
+        """Rebuild the FTS index from scratch.
+
+        Wipes and re-populates ``fts.content`` from markdown files and AST
+        nodes matching ``docs_glob`` / ``code_glob``, then (re)creates the
+        BM25 inverted index via ``PRAGMA create_fts_index``.
+
+        The FTS index does not auto-update on INSERT/UPDATE/DELETE — call
+        this after source files change.
+
+        Args:
+            docs_glob: Glob for markdown files, relative to ``session_root``.
+                Default ``'**/*.md'``.
+            code_glob: Glob for code files. Default ``'**/*.py'``.
+            sql_dir: Directory containing ``fts_rebuild.sql``. Auto-discovered
+                if None (same logic as ``load_macros``).
+
+        Raises:
+            FileNotFoundError: if ``fts_rebuild.sql`` cannot be located.
+        """
+        if sql_dir is None:
+            sql_dir = _find_sql_dir()
+        if sql_dir is None or not (sql_dir / "fts_rebuild.sql").exists():
+            raise FileNotFoundError(
+                "fts_rebuild.sql not found; ensure fledgling SQL sources "
+                "are available (pip install fledgling-mcp or dev checkout)."
+            )
+        self._con.execute("SET VARIABLE fts_docs_glob = ?", [docs_glob])
+        self._con.execute("SET VARIABLE fts_code_glob = ?", [code_glob])
+        _load_sql_file(self._con, sql_dir / "fts_rebuild.sql")
 
     def __getattr__(self, name: str):
         # First check macros
