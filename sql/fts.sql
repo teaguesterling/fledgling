@@ -131,6 +131,47 @@ CREATE OR REPLACE MACRO search_code(query, filter_kind := NULL, limit_n := 20) A
         limit_n := limit_n
     );
 
+-- find_code_ranked: Structural search (via ast_select) with BM25 relevance
+-- ranking layered on top. Pass a structural selector AND a BM25 query;
+-- results are joined against fts.content on (file_path, ordinal=node_id)
+-- and ordered by score. Bridges fledgling's lexical and structural axes.
+--
+-- Useful for "all functions, but only the ones relevant to this concept"
+-- — find_code alone returns everything unranked; search_code alone has
+-- no structural filter; this combination gives you both.
+--
+-- Only returns rows that appear in fts.content (definition, comment, or
+-- string). Selectors matching other kinds (.loop, .if, .call) will have
+-- no join partners and return nothing. Requires rebuild_fts() first.
+--
+-- Examples:
+--   -- Functions ranked by relevance to 'auth retry'
+--   SELECT * FROM find_code_ranked('src/**/*.py', '.func', 'auth retry');
+--
+--   -- Classes mentioning 'connection pool'
+--   SELECT * FROM find_code_ranked('**/*.py', '.class', 'connection pool');
+--
+--   -- With explicit language override
+--   SELECT * FROM find_code_ranked(
+--       'src/**/*.rs', '.func', 'validate', lang := 'rust');
+CREATE OR REPLACE MACRO find_code_ranked(
+    file_pattern, selector, fts_query, lang := NULL
+) AS TABLE
+    SELECT
+        a.file_path,
+        a.start_line,
+        a.end_line,
+        a.name,
+        semantic_type_to_string(a.semantic_type) AS kind,
+        a.type AS node_type,
+        a.peek,
+        fts_fts_content.match_bm25(c.id, fts_query) AS score
+    FROM ast_select(file_pattern, selector, language := lang) a
+    JOIN fts.content c
+        ON c.file_path = a.file_path AND c.ordinal = a.node_id
+    WHERE fts_fts_content.match_bm25(c.id, fts_query) IS NOT NULL
+    ORDER BY score DESC, a.file_path, a.start_line;
+
 -- fts_stats: Row counts per extractor/kind. Diagnostic view of what's
 -- currently in the index. Does NOT require the FTS index to exist —
 -- just reads the content table directly.

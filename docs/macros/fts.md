@@ -138,6 +138,40 @@ SELECT * FROM search_code('SELECT FROM read_ast', filter_kind := 'string');
 SELECT * FROM search_code('workaround', filter_kind := 'comment');
 ```
 
+### `find_code_ranked`
+
+Composition of `ast_select` (structural) with FTS (lexical ranking). Pass a structural selector AND a BM25 query; results are all the nodes matching the selector that also appear in `fts.content`, ordered by relevance.
+
+```sql
+find_code_ranked(file_pattern, selector, fts_query, lang := NULL)
+```
+
+**Returns**: `file_path`, `start_line`, `end_line`, `name`, `kind`, `node_type`, `peek`, `score`
+
+This is the "fuzzy front door for structural navigation" — where `find_definitions` demands a name prefix and `search_code` has no structural constraint, `find_code_ranked` gives you "all functions, ranked by how well they match this concept":
+
+```sql
+-- Functions most relevant to 'function_callers'
+SELECT name, score
+FROM find_code_ranked('**/*.py', '.func', 'function_callers')
+LIMIT 5;
+```
+
+```
+file                       line  name                               score
+test_code.py                317  test_caller_is_enclosing_function   5.11
+test_code.py                300  test_finds_callers                  3.14
+test_connection.py          320  test_find_definitions_and_callers   3.14
+test_e2e_integration.py     188  test_find_functions                 2.32
+test_e2e_integration.py     211  test_view_functions                 2.32
+```
+
+**How it works**: `ast_select` returns rows with `node_id`. Each code row in `fts.content` has `ordinal = node_id`. A JOIN on `(file_path, ordinal = node_id)` bridges the two, then `match_bm25()` scores each match.
+
+**Coverage**: only rows that also exist in `fts.content` are returned. Selectors that match kinds we don't index (`.loop`, `.if`, `.call`) will yield zero rows regardless of the query.
+
+**Cost**: `ast_select` re-parses the matched files, so `find_code_ranked` is slower than `search_code` (~500ms vs. ~25ms on this repo). If you already know you want a lexical answer, prefer `search_code`. Use this when the structural constraint matters.
+
 ### `fts_stats`
 
 Diagnostic macro — row and file counts per extractor/kind. No index required.

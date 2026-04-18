@@ -220,3 +220,56 @@ class TestSearchCode:
         ).fetchall()
         kinds = set(r[0] for r in rows)
         assert kinds.issubset({"definition", "comment", "string"})
+
+
+# ── find_code_ranked (structural + FTS composition) ──────────────────
+
+
+class TestFindCodeRanked:
+    # ast_select resolves globs against cwd (not session_root), so tests
+    # pin absolute file patterns via PROJECT_ROOT.
+    PY_GLOB = PROJECT_ROOT + "/**/*.py"
+
+    def test_returns_matches_for_func_selector(self, fts_populated):
+        rows = fts_populated.execute(
+            "SELECT * FROM find_code_ranked(?, ?, ?)",
+            [self.PY_GLOB, ".func", "function_callers"],
+        ).fetchall()
+        assert len(rows) > 0
+
+    def test_ordered_by_score_desc(self, fts_populated):
+        scores = fts_populated.execute(
+            "SELECT score FROM find_code_ranked(?, ?, ?)",
+            [self.PY_GLOB, ".func", "function_callers"],
+        ).fetchall()
+        vals = [s[0] for s in scores]
+        assert vals == sorted(vals, reverse=True)
+
+    def test_restricts_to_class_kind_for_class_selector(self, fts_populated):
+        # .class should only yield class definitions, not plain functions.
+        kinds = fts_populated.execute(
+            "SELECT DISTINCT kind FROM find_code_ranked(?, ?, ?)",
+            [self.PY_GLOB, ".class", "Connection"],
+        ).fetchall()
+        for (k,) in kinds:
+            assert "class" in k.lower()
+
+    def test_no_match_returns_empty(self, fts_populated):
+        # Literal computed at runtime to avoid self-indexing.
+        fake = "q" * 25
+        rows = fts_populated.execute(
+            "SELECT * FROM find_code_ranked(?, ?, ?)",
+            [self.PY_GLOB, ".func", fake],
+        ).fetchall()
+        assert rows == []
+
+    def test_columns(self, fts_populated):
+        desc = fts_populated.execute(
+            "DESCRIBE SELECT * FROM find_code_ranked(?, ?, ?)",
+            [self.PY_GLOB, ".func", "connect"],
+        ).fetchall()
+        cols = [r[0] for r in desc]
+        assert "file_path" in cols
+        assert "name" in cols
+        assert "kind" in cols
+        assert "score" in cols
