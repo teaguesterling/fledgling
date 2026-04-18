@@ -21,7 +21,7 @@
 | [**pluckit**](https://github.com/teaguesterling/pluckit) | Fluent Python API — CSS selectors, jQuery-style chaining, mutations | `pip install ast-pluckit` |
 | [**squackit**](https://github.com/teaguesterling/squackit) | MCP server with smart defaults, caching, workflows, prompts | `pip install squackit` (coming soon) |
 
-## MCP Tools (20)
+## MCP Tools (24)
 
 | Tool | Purpose |
 |------|---------|
@@ -45,6 +45,10 @@
 | [ChatSearch](macros/conversations.md) | Full-text search across conversations |
 | [ChatToolUsage](macros/conversations.md) | Tool usage frequency |
 | [ChatDetail](macros/conversations.md) | Deep view of a single session |
+| [SearchContent](macros/fts.md) | BM25 full-text search across docs + code (definitions, comments, strings) |
+| [SearchDocs](macros/fts.md) | BM25 search over markdown sections |
+| [SearchCode](macros/fts.md) | BM25 search over code (definitions/comments/strings) |
+| [FtsStats](macros/fts.md) | Diagnostic: counts per extractor/kind in the FTS index |
 
 ## SQL Macros by Tier
 
@@ -65,6 +69,9 @@
 
 ### [Conversations](macros/conversations.md)
 `sessions` `messages` `content_blocks` `tool_calls` `tool_results` `token_usage` `tool_frequency` `bash_commands` `session_summary` `model_usage` `search_messages` `search_tool_inputs`
+
+### [Full-Text Search](macros/fts.md)
+`search_content` `search_docs` `search_code` `fts_stats`  *(rebuild via `Connection.rebuild_fts()` or `sql/fts_rebuild.sql`)*
 
 ## Python API
 
