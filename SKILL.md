@@ -27,6 +27,10 @@ Fledgling gives you structured, token-efficient access to the codebase you're wo
 | **ChatSearch** | Search across conversation messages | `query`, `role` |
 | **ChatToolUsage** | Tool usage frequency | `project`, `days` |
 | **ChatDetail** | Deep view of a single session | `session_id` |
+| **SearchContent** | BM25 full-text search over docs + code (requires rebuild first) | `query`, `kind`, `extractor`, `limit` |
+| **SearchDocs** | BM25 search over markdown sections | `query`, `limit` |
+| **SearchCode** | BM25 search over code (definition/comment/string) | `query`, `kind`, `limit` |
+| **FtsStats** | Diagnostic: counts per extractor/kind in the FTS index | — |
 
 ### Query-Only Macros
 

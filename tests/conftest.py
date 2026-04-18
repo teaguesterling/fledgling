@@ -148,6 +148,42 @@ def structural_macros(con):
 
 
 @pytest.fixture
+def fts_macros(con):
+    """Connection with FTS extension + sandbox + fts macros (schema + search).
+
+    Does NOT populate the index — use `fts_populated` for search tests.
+    """
+    con.execute("LOAD read_lines")
+    con.execute("LOAD sitting_duck")
+    con.execute("LOAD markdown")
+    con.execute("LOAD fts")
+    con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
+    load_sql(con, "sandbox.sql")
+    load_sql(con, "fts.sql")
+    return con
+
+
+@pytest.fixture(scope="session")
+def fts_populated():
+    """Session-scoped FTS connection with the repo rebuilt into the index.
+
+    Building the index is expensive (~3s against the repo). Session scope
+    lets read-only search tests share one populated connection.
+    """
+    con = duckdb.connect(":memory:")
+    con.execute("LOAD read_lines")
+    con.execute("LOAD sitting_duck")
+    con.execute("LOAD markdown")
+    con.execute("LOAD fts")
+    con.execute(f"SET VARIABLE session_root = '{PROJECT_ROOT}'")
+    load_sql(con, "sandbox.sql")
+    load_sql(con, "fts.sql")
+    load_sql(con, "fts_rebuild.sql")
+    yield con
+    con.close()
+
+
+@pytest.fixture
 def workflows_macros(con):
     """Connection with all extensions + every tier needed for workflow composition."""
     con.execute("LOAD read_lines")

@@ -17,6 +17,7 @@ LOAD read_lines;
 LOAD sitting_duck;
 LOAD markdown;
 LOAD duck_tails;
+LOAD fts;
 
 -- Capture project root before lockdown.
 -- Priority: pre-set variable > FLEDGLING_ROOT env var > CWD.
@@ -36,7 +37,7 @@ SET VARIABLE conversations_root = COALESCE(
 
 -- Fledgling metadata (read by dr_fledgling)
 SET VARIABLE fledgling_version = '0.8.2';
-SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'workflows', 'conversations', 'help'];
+SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural', 'workflows', 'conversations', 'help', 'fts'];
 
 -- Additional allowed directories (set before this point if needed).
 -- Example: SET VARIABLE extra_dirs = ['/data/shared', '/opt/models'];
@@ -59,6 +60,8 @@ SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural'
 
 .read sql/help.sql
 
+.read sql/fts.sql
+
 -- Publish MCP tools (comment out a line to disable that category)
 .read sql/tools/files.sql
 .read sql/tools/code.sql
@@ -67,3 +70,4 @@ SET VARIABLE fledgling_modules = ['source', 'code', 'docs', 'repo', 'structural'
 .read sql/tools/workflows.sql
 .read sql/tools/conversations.sql
 .read sql/tools/help.sql
+.read sql/tools/fts.sql
