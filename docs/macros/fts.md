@@ -2,7 +2,7 @@
 
 **Extension**: [`fts`](https://duckdb.org/docs/current/core_extensions/full_text_search) (bundled)
 
-BM25-based lexical search across markdown documentation and code (definitions, comments, and string literals). Extracted chunks live in a single `fts.content` table and are scored via DuckDB's built-in inverted-index implementation.
+BM25-based lexical search across markdown documentation and code (definitions, comments, and string literals). Extracted chunks live in the `fts.content` table and are scored via DuckDB's built-in inverted-index implementation. Additional named collections can be created with independent BM25 indexes for ad-hoc data (tool catalogs, intent mappings, etc.).
 
 Complementary to existing grep-style and AST-structural macros — this is the "find things containing these words" axis, where `find_definitions` answers "find the `parse_config` function" and `search_code` answers "find any code mentioning authentication".
 
@@ -202,6 +202,88 @@ Four tools are published in all profiles:
 
 All four require a populated index. If agents call `SearchContent` before `rebuild_fts()` has run, they'll get a clear "function does not exist" error directing them to rebuild.
 
+## Named Collections
+
+Beyond the default `fts.content` table, you can create additional BM25 indexes with independent IDF statistics. Each named collection gets its own table (`fts.<name>`) and inverted index, tracked in the `fts.collections` catalog.
+
+### Schema
+
+Every named collection uses a fixed three-column schema:
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `TEXT` | Caller-defined primary key |
+| `text` | `TEXT` | Searchable content — BM25 index target |
+| `metadata` | `MAP(TEXT, TEXT)` | Arbitrary key-value metadata |
+
+This is deliberately narrower than `fts.content`. Collections are for ad-hoc BM25 indexes over arbitrary data (tool descriptions, intent catalogs, etc.) — they don't need file paths or AST back-references.
+
+### Catalog: `fts.collections`
+
+The catalog tracks all collections including the default `content`:
+
+```sql
+SELECT * FROM fts.collections;
+```
+
+```
+ name     | created_at          | rebuilt_at
+----------+---------------------+---------------------
+ content  | 2026-04-26 12:00:00 | 2026-04-26 12:00:00
+ tools    | 2026-04-26 12:01:00 | 2026-04-26 12:01:00
+```
+
+`content` is registered automatically by `rebuild_fts()`. Named collections are registered when created.
+
+### Python API
+
+Collections are managed through the `Connection` wrapper — DuckDB macros can't execute DDL, so these are Python-side SQL templates.
+
+#### `create_fts_collection(name, source_query)`
+
+Create (or replace) a named collection. The source query must return exactly `(id TEXT, text TEXT, metadata MAP(TEXT, TEXT))`:
+
+```python
+con = fledgling.connect(root='.')
+
+con.create_fts_collection("tools", """
+    SELECT 'search' AS id,
+           'full-text BM25 search over code and docs' AS text,
+           map{'kit': 'fledgling'} AS metadata
+    UNION ALL
+    SELECT 'find', 'structural AST search via selectors',
+           map{'kit': 'sitting_duck'}
+""")
+```
+
+The operation is idempotent — calling it again replaces the table, rebuilds the index, and updates the catalog timestamp.
+
+#### `search_collection(name, query, limit=20)`
+
+BM25 search a named collection. Returns `(id, text, metadata, score)` tuples ordered by relevance:
+
+```python
+results = con.search_collection("tools", "search")
+for id, text, metadata, score in results:
+    print(f"{score:.2f}  {id}: {text}")
+```
+
+### pluckit wrapper
+
+pluckit exposes collections through `FtsCollection` for a cleaner lifecycle:
+
+```python
+from pluckit import Plucker
+from pluckit.pluckins.search import Search
+
+pluck = Plucker(code="src/**/*.py", plugins=[Search])
+col = pluck.fts_collection("tools")
+col.create("SELECT 'search' AS id, 'BM25 search' AS text, map{} AS metadata")
+results = col.search("search")
+```
+
+See the [pluckit API docs](https://github.com/.../pluckit/docs/api.md) for full `FtsCollection` reference.
+
 ## Caveats
 
 - **Manual rebuild.** The FTS index doesn't update when `fts.content` changes. Call `rebuild_fts()` after source file edits or re-run the SQL script. See [duckdb/duckdb#3543](https://github.com/duckdb/duckdb/issues/3543) for the upstream limitation.
@@ -212,6 +294,7 @@ All four require a populated index. If agents call `SearchContent` before `rebui
 
 ## Design notes
 
-- **One table, many extractors.** Rather than a separate table per kind, one `fts.content` table with a discriminator (`extractor`, `kind`) and opaque extensibility (`name`, `ordinal`, `attrs`). Adding a new extractor (e.g. conversation messages, SQL macro definitions) is an INSERT path change, not a schema change.
+- **Two schema tiers.** The default `fts.content` table uses a wide schema (file_path, ordinal, kind, extractor, attrs) because `find_code_ranked`, search macros, and MCP tools depend on those columns. Named collections use a narrow three-column schema `(id, text, metadata)` — they're for ad-hoc BM25 over arbitrary data, not source-file indexing.
+- **One table, many extractors.** Within `fts.content`, one table with a discriminator (`extractor`, `kind`) and opaque extensibility (`name`, `ordinal`, `attrs`). Adding a new extractor (e.g. conversation messages, SQL macro definitions) is an INSERT path change, not a schema change.
 - **Storage is caller-controlled.** Fledgling doesn't pick `.fledgling/index.db` — whatever database you've opened or ATTACHed holds the index.
 - **Complement to AST and grep, not a replacement.** `find_definitions` answers "where is this symbol defined" (structural); `search_code` answers "what mentions these words" (lexical). Use both.

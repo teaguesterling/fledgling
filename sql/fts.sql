@@ -8,6 +8,12 @@
 -- is caller-controlled: an in-memory DB gives an ephemeral index,
 -- a persistent DB gives a persistent index.
 --
+-- Named collections: the fts.collections catalog table tracks
+-- additional BM25 indexes beyond the default fts.content. Each
+-- collection gets its own table (fts.<name>) and BM25 index with
+-- independent IDF statistics. Collections are managed by the Python
+-- Connection wrapper (create_fts_collection, search_collection).
+--
 -- Schema columns:
 --   id         BIGINT     — primary key (assigned at rebuild time)
 --   file_path  VARCHAR    — source file (from read_ast / read_markdown_sections)
