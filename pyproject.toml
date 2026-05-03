@@ -29,6 +29,7 @@ docs = [
 
 [project.scripts]
 fledgling = "fledgling.cli:main"
+fledgling-mcp = "fledgling.cli:mcp_main"
 
 [project.urls]
 Homepage = "https://github.com/teaguesterling/fledgling"
