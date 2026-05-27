@@ -150,6 +150,11 @@ _DEFAULT_MODULES = [
 ]
 
 _DEFAULT_EXTENSIONS = ["read_lines", "sitting_duck", "markdown", "duck_tails", "fts"]
+# Extensions a read-only reader needs to QUERY a pre-built cache. The persisted
+# FTS index + tables only require `fts`; the ingest/AST extractors (sitting_duck,
+# read_lines, ...) are build-time only and some cannot even load read-only. Keeping
+# this minimal is what keeps a cache-hit query well under the latency budget.
+_READONLY_EXTENSIONS = ["fts"]
 
 
 # ── Compose helpers (Delta 4) ────────────────────────────────────────
@@ -158,16 +163,26 @@ _DEFAULT_EXTENSIONS = ["read_lines", "sitting_duck", "markdown", "duck_tails", "
 def load_extensions(
     con: duckdb.DuckDBPyConnection,
     extensions: Optional[list[str]] = None,
+    tolerant: bool = False,
 ) -> None:
     """Load DuckDB extensions required by fledgling macros.
 
     Defaults to `_DEFAULT_EXTENSIONS`. Pass an explicit list to load a
     different set, or an empty list to skip extension loading entirely.
+
+    With ``tolerant=True``, an extension that fails to load is skipped instead
+    of raising. Used by read-only readers of a persistent cache: build-only
+    extensions (e.g. the AST/markdown extractors) cannot load on a read-only
+    connection and are not needed to query the already-built FTS index.
     """
     if extensions is None:
         extensions = _DEFAULT_EXTENSIONS
     for ext in extensions:
-        con.execute(f"LOAD {ext}")
+        try:
+            con.execute(f"LOAD {ext}")
+        except Exception:
+            if not tolerant:
+                raise
 
 
 def set_session_root(
@@ -357,6 +372,8 @@ def connect(
     profile: str = "analyst",
     modules: Optional[list[str]] = None,
     extensions: bool = True,
+    persist: Optional[str] = None,
+    read_only: bool = False,
 ) -> "Connection":
     """Create a DuckDB connection with fledgling macros loaded.
 
@@ -398,13 +415,40 @@ def connect(
             Only used in Modes 2 and 3.
         extensions: Whether to load DuckDB extensions. Set False if
             extensions are already loaded (e.g., in tests).
+        persist: Path to a file-backed DuckDB cache. Default ``None`` keeps the
+            historical in-memory (``:memory:``) behavior. When set, the AST/FTS
+            tables, the FTS index, and the fledgling macros are persisted in the
+            file — so a *builder* writes it once and *readers* attach instead of
+            rebuilding (workstream C). See `build_cache`.
+        read_only: Open the persistent cache read-only. Requires ``persist``.
+            A read-only reader issues no catalog writes: the macros, data, and
+            FTS index already live in the file, so configuration is skipped and
+            only the query-side extensions are loaded (tolerantly). Multiple
+            readers can share one cache while a single builder owns writes.
 
     Returns:
         A `Connection` proxy wrapping the new DuckDB connection with all
         fledgling macros available as method calls.
     """
     root = root or os.getcwd()
-    raw = duckdb.connect(":memory:")
+    database = persist or ":memory:"
+    # read_only is only meaningful for a file-backed cache; ignore it for :memory:.
+    ro = bool(read_only and persist)
+    raw = duckdb.connect(database, read_only=ro)
+
+    # Read-only reader of a pre-built persistent cache: macros + tables + FTS
+    # index are already present, and the connection forbids catalog writes, so we
+    # must NOT run configure() (it issues CREATE MACRO). Load only the query-side
+    # extensions (tolerantly) and set the connection-scoped session vars.
+    if ro:
+        # Lean reader of a pre-built cache: load only the query-side extension(s).
+        # We deliberately do NOT set session variables here — on a read-only DuckDB
+        # connection the first SET VARIABLE pays a large one-time cost (~0.4s), and
+        # the persisted FTS macros (search_content/-code) don't need them. Readers
+        # that call session_root-dependent macros should use a read-write connection.
+        if extensions:
+            load_extensions(raw, extensions=_READONLY_EXTENSIONS, tolerant=True)
+        return Connection(raw)
 
     # Mode 1: explicit init file — user is authoritative, no source loading
     if init is not None and init is not False:
@@ -460,6 +504,138 @@ def attach(
         overlay=overlay,
     )
     return Connection(con)
+
+
+# ── Persistent cache builder (workstream C) ──────────────────────────
+
+
+def _cache_related(path: str) -> bool:
+    """True if a repo-relative path is the cache itself (or its sidecar/dir), so it
+    must not contribute to the project content key — otherwise the cache would
+    invalidate its own freshness the moment it is written."""
+    p = path.strip().strip('"')
+    return (
+        ".fledgling/" in p
+        or p.endswith(".duckdb")
+        or p.endswith(".duckdb.wal")
+        or p.endswith(".duckdb.tmp")
+    )
+
+
+def _project_cache_key(root: str, persist: Optional[str] = None) -> Optional[str]:
+    """Content key for a project: git HEAD + uncommitted changes to *source*.
+
+    Keyed on *content*, not mtime — a git worktree re-checkout gives identical
+    content fresh mtimes, so an mtime key would force needless rebuilds. The cache
+    file/sidecars (and anything under ``.fledgling/``) are excluded so a co-located
+    cache never shifts its own key. Returns None when `root` is not a git repo
+    (caller then treats the cache as always stale and rebuilds).
+    """
+    import hashlib
+    import subprocess
+
+    try:
+        head = subprocess.run(
+            ["git", "-C", root, "rev-parse", "HEAD"],
+            capture_output=True, text=True,
+        )
+        if head.returncode != 0:
+            return None
+        status = subprocess.run(
+            ["git", "-C", root, "status", "--porcelain"],
+            capture_output=True, text=True,
+        )
+        h = hashlib.sha256()
+        h.update(head.stdout.strip().encode())
+        h.update(b"\0")
+        for line in status.stdout.splitlines():
+            # porcelain line: "XY <path>" (path starts at col 3)
+            path = line[3:] if len(line) > 3 else ""
+            if path and not _cache_related(path):
+                h.update(line.encode())
+                h.update(b"\n")
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def _fts_nonempty(con: duckdb.DuckDBPyConnection) -> bool:
+    try:
+        return con.execute("SELECT count(*) FROM fts.content").fetchone()[0] > 0
+    except Exception:
+        return False
+
+
+def cache_is_fresh(persist: str, root: Optional[str] = None) -> bool:
+    """True if the cache at `persist` exists, holds FTS content, and matches the
+    current project content key. A read-only probe (no writer held)."""
+    root = root or os.getcwd()
+    key = _project_cache_key(root, persist)
+    if key is None or not os.path.exists(persist):
+        return False
+    probe = duckdb.connect(persist, read_only=True)
+    try:
+        row = probe.execute(
+            "SELECT value FROM fledgling_cache_meta WHERE key = 'content_key'"
+        ).fetchone()
+    except Exception:
+        return False
+    finally:
+        is_fts = _fts_nonempty(probe)
+        probe.close()
+    return row is not None and row[0] == key and is_fts
+
+
+def build_cache(
+    persist: str,
+    root: Optional[str] = None,
+    *,
+    force: bool = False,
+    docs_glob: str = "**/*.md",
+    code_glob: str = "**/*.py",
+    profile: str = "analyst",
+    modules: Optional[list[str]] = None,
+    extensions: bool = True,
+) -> bool:
+    """Build (or refresh) a file-backed fledgling cache at `persist`.
+
+    The single-writer half of workstream C: builds the AST/FTS tables, the FTS
+    index, and the fledgling macros into the file, then records the project
+    content key. Idempotent + staleness-aware — if the cache already matches the
+    current key (and has FTS content), it is left untouched and **False** is
+    returned; otherwise it (re)builds wholesale and returns **True**.
+
+    Readers then open it cheaply with ``connect(persist=persist,
+    read_only=True)`` and skip the rebuild entirely.
+
+    DuckDB enforces a single writer per file; concurrent builders raise. A
+    last-good-snapshot fallback for readers racing a build is deferred (v2).
+    """
+    root = root or os.getcwd()
+    if not force and cache_is_fresh(persist, root):
+        return False
+
+    parent = os.path.dirname(os.path.abspath(persist))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+    con = connect(
+        persist=persist, root=root, profile=profile,
+        modules=modules, extensions=extensions,
+    )
+    con.rebuild_fts(docs_glob=docs_glob, code_glob=code_glob)
+    raw = con.con
+    raw.execute(
+        "CREATE TABLE IF NOT EXISTS fledgling_cache_meta "
+        "(key TEXT PRIMARY KEY, value TEXT)"
+    )
+    raw.execute(
+        "INSERT INTO fledgling_cache_meta VALUES ('content_key', ?) "
+        "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+        [_project_cache_key(root, persist) or ""],
+    )
+    raw.close()
+    return True
 
 
 # ── Connection proxy ─────────────────────────────────────────────────

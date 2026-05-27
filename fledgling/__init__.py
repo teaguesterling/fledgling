@@ -9,6 +9,8 @@ except Exception:
 from fledgling.connection import (
     connect,
     attach,
+    build_cache,
+    cache_is_fresh,
     configure,
     lockdown,
     load_extensions,
@@ -22,6 +24,8 @@ from fledgling.tools import ToolInfo
 __all__ = [
     "connect",
     "attach",
+    "build_cache",
+    "cache_is_fresh",
     "configure",
     "lockdown",
     "load_extensions",

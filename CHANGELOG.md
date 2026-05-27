@@ -1,3 +1,27 @@
+## 0.11.0
+
+### Added — persistent fact substrate (workstream C)
+A file-backed cache so the AST/FTS index is built once and *attached* on reuse,
+instead of rebuilt in-memory every connect (~4 s → ~0.3 s cache hit, >10×):
+
+- `connect(persist=<path>, read_only=<bool>)` — default `persist=None` keeps the
+  historical in-memory (`:memory:`) behavior. With `persist`, the macros, AST/FTS
+  tables, and FTS index live in the file. A read-only reader issues **no** catalog
+  writes: configuration is skipped (macros are already persisted) and only the
+  query-side extension (`fts`) is loaded, so a cache-hit query stays well under a
+  hook-time budget.
+- `build_cache(persist, root=None, *, force=False, ...)` — the single-writer
+  builder. Idempotent + staleness-aware: rebuilds only when the project content
+  key changed, else returns `False`. Readers then `connect(persist=..., read_only=True)`.
+- `cache_is_fresh(persist, root=None)` — read-only freshness probe.
+- Staleness is keyed on **git content** (HEAD + uncommitted source changes), not
+  mtime (a worktree re-checkout gives fresh mtimes but identical content). The
+  cache file and its sidecars are excluded from the key so it never invalidates
+  itself.
+
+Single-writer (DuckDB-enforced); a last-good-snapshot fallback for readers racing
+a build, and incremental (per-file) rebuild, are deferred to a later release.
+
 # Changelog
 
 ## 0.10.0
