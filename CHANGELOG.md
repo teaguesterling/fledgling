@@ -19,6 +19,12 @@ instead of rebuilt in-memory every connect (~4 s → ~0.3 s cache hit, >10×):
   cache file and its sidecars are excluded from the key so it never invalidates
   itself.
 
+### Performance
+- `Tools` discovery (an `mcp_list_tools()` + catalog scan, ~80 ms) is now **lazy** —
+  deferred to first access of `.tools`/macros. A read-only reader that only queries
+  via `con.con` never pays it, so `connect()` is ~80 ms cheaper across the board
+  (read-only cache-hit `connect` ~130 ms → ~50 ms).
+
 Single-writer (DuckDB-enforced); a last-good-snapshot fallback for readers racing
 a build, and incremental (per-file) rebuild, are deferred to a later release.
 

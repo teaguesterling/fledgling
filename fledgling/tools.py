@@ -132,10 +132,27 @@ class Tools:
 
     def __init__(self, con: duckdb.DuckDBPyConnection):
         self._con = con
-        self._macros: dict[str, list[str]] = {}
-        self._tool_info: dict[str, ToolInfo] = {}
+        self._discovered = False
+        self._macros_data: dict[str, list[str]] = {}
+        self._tool_info_data: dict[str, ToolInfo] = {}
         self._source: str = "unknown"  # "mcp_registry" or "catalog"
-        self._discover()
+        # Discovery (an mcp_list_tools() + catalog scan, ~80 ms) is deferred to first
+        # access: a read-only FTS reader that only queries via `con.con` never pays it.
+
+    def _ensure_discovered(self) -> None:
+        if not self._discovered:
+            self._discovered = True  # set first so _discover()'s own reads don't recurse
+            self._discover()
+
+    @property
+    def _macros(self) -> dict[str, list[str]]:
+        self._ensure_discovered()
+        return self._macros_data
+
+    @property
+    def _tool_info(self) -> dict[str, "ToolInfo"]:
+        self._ensure_discovered()
+        return self._tool_info_data
 
     # ── Discovery ────────────────────────────────────────────────────
 
@@ -149,26 +166,26 @@ class Tools:
             # Curated path: intersect MCP publications with the catalog.
             # Macro params come from the catalog (accurate SQL signature);
             # everything else comes from the MCP publication.
-            self._macros = {
+            self._macros_data = {
                 name: params
                 for name, params in all_macros.items()
                 if name in mcp_tools
             }
-            for name, params in self._macros.items():
+            for name, params in self._macros_data.items():
                 info = mcp_tools[name]
                 info.params = params
-                self._tool_info[name] = info
+                self._tool_info_data[name] = info
             self._source = "mcp_registry"
         else:
             # Fallback: expose all non-underscore table macros, no metadata.
-            self._macros = {
+            self._macros_data = {
                 name: params
                 for name, params in all_macros.items()
                 if not name.startswith("_")
             }
-            self._tool_info = {
+            self._tool_info_data = {
                 name: ToolInfo(macro_name=name, params=params)
-                for name, params in self._macros.items()
+                for name, params in self._macros_data.items()
             }
             self._source = "catalog"
 
