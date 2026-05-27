@@ -51,7 +51,16 @@ CREATE OR REPLACE MACRO read_source_text(
     FROM read_source(
         CASE WHEN commit IS NULL
              THEN file_path
-             ELSE git_uri(_session_root(), file_path, commit)
+             -- git_uri() prepends the repo root, so it needs a repo-relative
+             -- path. file_path may already be absolutized by _resolve() in the
+             -- tool wrapper; strip the root prefix to avoid doubling it.
+             ELSE git_uri(
+                 _session_root(),
+                 CASE WHEN starts_with(file_path, _session_root() || '/')
+                      THEN substr(file_path, length(_session_root()) + 2)
+                      ELSE file_path END,
+                 commit
+             )
         END,
         lines, ctx, match
     );

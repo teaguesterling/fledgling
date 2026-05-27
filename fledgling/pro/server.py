@@ -181,8 +181,8 @@ def create_server(
 
     # Register each macro as an MCP tool
     for macro_info in con._tools.list():
-        macro_name = macro_info["name"]
-        params = macro_info["params"]
+        macro_name = macro_info.macro_name
+        params = macro_info.params
 
         if macro_name in _SKIP:
             continue

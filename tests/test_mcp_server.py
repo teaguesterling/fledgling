@@ -142,39 +142,39 @@ class TestCodeStructure:
         assert md_row_count(text) > 0
 
 
-class TestFindInAST:
-    """FindInAST uses text format: grep-style file:line  context."""
+class TestFindCode:
+    """FindCode (replaces the removed FindInAST tool — see sql/tools/code.sql)
+    uses CSS selectors over the AST; grep-style text: file:line | name | KIND."""
 
     def test_finds_calls(self, mcp_server):
-        text = call_tool(mcp_server, "FindInAST", {
+        text = call_tool(mcp_server, "FindCode", {
             "file_pattern": CONFTEST_PATH,
-            "kind": "calls",
+            "selector": ".call",
         })
         assert text_line_count(text) > 0
 
     def test_finds_imports(self, mcp_server):
-        text = call_tool(mcp_server, "FindInAST", {
+        text = call_tool(mcp_server, "FindCode", {
             "file_pattern": CONFTEST_PATH,
-            "kind": "imports",
+            "selector": ".import",
         })
         assert text_line_count(text) > 0
         assert "import" in text.lower() or "os" in text
 
     def test_name_filter(self, mcp_server):
-        text = call_tool(mcp_server, "FindInAST", {
+        text = call_tool(mcp_server, "FindCode", {
             "file_pattern": CONFTEST_PATH,
-            "kind": "calls",
-            "name_pattern": "execute%",
+            "selector": ".call#execute",
         })
         assert text_line_count(text) > 0
         assert "execute" in text
 
     def test_grep_style_output(self, mcp_server):
-        text = call_tool(mcp_server, "FindInAST", {
+        text = call_tool(mcp_server, "FindCode", {
             "file_pattern": CONFTEST_PATH,
-            "kind": "imports",
+            "selector": ".import",
         })
-        # Each line should be file:line  context
+        # Each line should be file:line | name | KIND
         lines = [l for l in text.strip().split("\n") if l.strip()]
         assert len(lines) > 0
         assert ":" in lines[0]  # file:line format

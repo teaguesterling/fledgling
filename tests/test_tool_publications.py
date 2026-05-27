@@ -478,8 +478,11 @@ class TestGitDiffFileTool:
         })
         lines = [l for l in text.strip().split("\n") if l]
         assert len(lines) > 0
-        # Check first non-empty line starts with +/- or space
-        assert lines[0][0] in ("+", "-", " ")
+        # Diff tools prepend a "# file:range" header line; the diff body lines
+        # carry the +/- /space markers.
+        body = [l for l in lines if not l.startswith("#")]
+        assert body, "diff produced only a header / no body lines"
+        assert all(l[0] in ("+", "-", " ") for l in body)
 
 
 class TestSelectCodeTool:

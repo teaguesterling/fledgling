@@ -64,6 +64,10 @@ class ToolInfo:
     """Metadata about a fledgling SQL macro, optionally enriched with MCP
     tool publication data.
 
+    **Public API** (SemVer-stable): the attributes ``macro_name`` and
+    ``params`` are guaranteed; downstream consumers (e.g. squackit) import
+    and rely on this dataclass.
+
     Always populated (from duckdb_functions catalog):
         macro_name, params
 
@@ -278,7 +282,7 @@ class Tools:
         return len(self._macros)
 
     def list(self) -> list[ToolInfo]:
-        """List all available tools with full metadata.
+        """List all available tools with full metadata. **Public API.**
 
         Returns a list of :class:`ToolInfo` objects sorted by macro name.
         """

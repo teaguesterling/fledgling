@@ -210,14 +210,14 @@ class TestPluckitViewer:
 
     def test_view_functions(self):
         from pluckit import Plucker
-        from pluckit.plugins.viewer import AstViewer
+        from pluckit.pluckins.viewer import AstViewer
         p = Plucker(code=CONNECTION_PATH, repo=PROJECT_ROOT, plugins=[AstViewer])
         output = p.view(".func#connect")
         assert "def connect" in str(output)
 
     def test_view_class_outline(self):
         from pluckit import Plucker
-        from pluckit.plugins.viewer import AstViewer
+        from pluckit.pluckins.viewer import AstViewer
         p = Plucker(code=CONNECTION_PATH, repo=PROJECT_ROOT, plugins=[AstViewer])
         output = p.view(".cls#Connection")
         md = str(output)
@@ -364,7 +364,7 @@ class TestFledglingPluckitIntegration:
     def test_viewer_find_renders_with_fledgling_macros(self):
         """AstViewer works end-to-end through pluckit → fledgling chain."""
         from pluckit import Plucker
-        from pluckit.plugins.viewer import AstViewer
+        from pluckit.pluckins.viewer import AstViewer
         p = Plucker(code=CONNECTION_PATH, repo=PROJECT_ROOT, plugins=[AstViewer])
         output = p.view(".func#connect")
         md = str(output)

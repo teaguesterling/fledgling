@@ -477,7 +477,8 @@ class Connection:
         con.find_definitions("**/*.py").show()
         con.recent_changes(5).limit(3).df()
 
-    The full Tools object is available at ``con._tools``. Tools uses the
+    The full Tools object is available at ``con.tools`` (``._tools`` is a
+    deprecated alias). Tools uses the
     MCP publication registry (via duckdb_mcp's `mcp_list_tools()` table
     function) to expose only curated user-facing macros with descriptions,
     falling back to a full catalog scan when the registry is unavailable
@@ -488,6 +489,48 @@ class Connection:
         from fledgling.tools import Tools
         self._con = con
         self._tools = Tools(con)
+        self._fts_built = False
+
+    # ── Public API (SemVer-stable; see CHANGELOG "Public API") ──────────────
+    # `_con` / `_tools` remain as deprecated internal aliases; new code should
+    # use `.con` / `.tools`. Downstream packages (squackit) depend on these.
+    @property
+    def con(self) -> duckdb.DuckDBPyConnection:
+        """The underlying raw DuckDB connection. Public, stable accessor
+        (replaces the internal ``._con``)."""
+        return self._con
+
+    @property
+    def tools(self):
+        """The :class:`fledgling.tools.Tools` registry. ``tools.list()`` yields
+        :class:`~fledgling.tools.ToolInfo` objects. Public, stable accessor
+        (replaces the internal ``._tools``)."""
+        return self._tools
+
+    def ensure_fts(self, **kwargs) -> bool:
+        """Idempotently ensure the ``fts.content`` index is built.
+
+        Builds (via :meth:`rebuild_fts`) on first call, or if the index is
+        missing/empty; a no-op once built. Safe to call before every FTS
+        query — this is the public home of the lazy-rebuild that downstream
+        FTS tools (e.g. squackit ``search_*``) need. ``kwargs`` are forwarded
+        to :meth:`rebuild_fts` (``docs_glob`` / ``code_glob`` / ``sql_dir``).
+
+        Returns:
+            True if a build was performed, False if the index was already live.
+        """
+        if self._fts_built:
+            return False
+        try:
+            n = self._con.execute("SELECT count(*) FROM fts.content").fetchone()[0]
+        except Exception:
+            n = 0
+        if n:
+            self._fts_built = True
+            return False
+        self.rebuild_fts(**kwargs)
+        self._fts_built = True
+        return True
 
     def rebuild_fts(
         self,
