@@ -441,13 +441,15 @@ def connect(
     # must NOT run configure() (it issues CREATE MACRO). Load only the query-side
     # extensions (tolerantly) and set the connection-scoped session vars.
     if ro:
-        # Lean reader of a pre-built cache: load only the query-side extension(s).
-        # We deliberately do NOT set session variables here — on a read-only DuckDB
-        # connection the first SET VARIABLE pays a large one-time cost (~0.4s), and
-        # the persisted FTS macros (search_content/-code) don't need them. Readers
-        # that call session_root-dependent macros should use a read-write connection.
-        if extensions:
-            load_extensions(raw, extensions=_READONLY_EXTENSIONS, tolerant=True)
+        # Lean reader of a pre-built cache — return as soon as the file is open.
+        #  * No eager extension load: DuckDB autoloads `fts` on the first query that
+        #    references it (autoload_known_extensions, default on), so a non-FTS reader
+        #    pays nothing and an FTS reader pays the ~18ms autoload only on its first
+        #    match_bm25 query, not on every connect.
+        #  * No SET VARIABLE: on a read-only connection the first one costs ~0.4s, and
+        #    the persisted FTS macros don't need session vars. Readers that call
+        #    session_root-dependent macros should use a read-write connection.
+        #  * Tools discovery is lazy (see Tools), so Connection() itself is ~0ms.
         return Connection(raw)
 
     # Mode 1: explicit init file — user is authoritative, no source loading
