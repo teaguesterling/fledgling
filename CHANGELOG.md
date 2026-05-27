@@ -1,3 +1,13 @@
+## 0.11.1
+
+### Fixed
+- **Pin `duckdb==1.5.2`.** The unbounded `duckdb>=1.5.0` let a fresh
+  `pip install fledgling-mcp` pull duckdb **1.5.3**, whose community extensions
+  (`read_lines`, `sitting_duck`, `markdown`, `duck_tails`) aren't available — so
+  `rebuild_fts()` / `build_cache()` / all FTS failed on a clean install with
+  `Extension ".../v1.5.3/.../read_lines.duckdb_extension" not found`. 1.5.2 (the fleet-wide pin) has the extensions; verified a fresh install + persist round-trip
+  works under the pin. (Affected 0.10.0 and 0.11.0 too.)
+
 ## 0.11.0
 
 ### Added — persistent fact substrate (workstream C)
