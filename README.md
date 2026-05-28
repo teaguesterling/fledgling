@@ -146,7 +146,9 @@ pip install fledgling-mcp
 
 ### Requirements
 
-- [DuckDB](https://duckdb.org/) >= 1.5.0 (CLI for MCP server, Python package for API)
+- [DuckDB](https://duckdb.org/) **1.5.2**, pinned (`duckdb==1.5.2`) — CLI for the MCP server,
+  Python package for the API. The community extensions are built per DuckDB version, so
+  1.5.3 can't find them and FTS breaks; stay on 1.5.2.
 - Community extensions installed automatically
 
 ## Ecosystem
