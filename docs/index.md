@@ -10,7 +10,7 @@
 
 | Layer | Install | What you get |
 |-------|---------|-------------|
-| **SQL macros** | `curl \| duckdb` | 28 MCP tools, 30+ query macros, pure DuckDB, zero Python |
+| **SQL macros** | `curl \| duckdb` | 24 MCP tools, 30+ query macros, pure DuckDB, zero Python |
 | **Python API** | `pip install fledgling-mcp` | `fledgling.connect()`, macros as methods, CLI, `attach`/`lockdown`/`configure` |
 
 ## Ecosystem
@@ -125,5 +125,5 @@ Fledgling composes these DuckDB community extensions:
 ## Stats
 
 - 539 tests across SQL macros, MCP tools, CLI, Python API, and e2e integration
-- 28 MCP tools + 30+ query macros
-- Requires DuckDB >= 1.5.0
+- 24 MCP tools + 30+ query macros
+- Requires DuckDB 1.5.2 (pinned)

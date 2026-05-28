@@ -2,7 +2,9 @@
 
 ## Requirements
 
-- [DuckDB](https://duckdb.org/) >= 1.4.4
+- [DuckDB](https://duckdb.org/) **1.5.2** (pinned — `duckdb==1.5.2`). The community
+  extensions below are built per DuckDB version; 1.5.3 resolves them from a different
+  versioned path where they aren't installed, which breaks FTS / `build_cache`. Stay on 1.5.2.
 - Community extensions (installed automatically on first use):
     - `read_lines` — line-level file access
     - `sitting_duck` — AST-based code analysis
@@ -15,7 +17,7 @@
 Fledgling is currently a collection of SQL macro files. To use it:
 
 ```bash
-git clone https://github.com/teaguesterling/source-sextant.git
+git clone https://github.com/teaguesterling/fledgling.git
 cd fledgling
 ```
 
