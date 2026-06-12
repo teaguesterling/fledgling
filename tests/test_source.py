@@ -183,6 +183,109 @@ class TestProjectOverviewMacro:
         ).fetchall()
         assert len(rows) == 0
 
+    def test_excludes_vendored_and_build_dirs(self, source_macros, tmp_path):
+        # Own code plus dependency / build / checked-in vendored trees that
+        # project_overview must not count.
+        (tmp_path / "main.py").write_text("print('hi')")
+        for junk in [
+            "node_modules/dep/index.js",
+            "build/main.o.py",
+            "__pycache__/main.cpython.py",
+            "test/googletest-release-1.8.0/src/gtest.cc",
+            "third_party/lib/lib.py",
+        ]:
+            p = tmp_path / junk
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x")
+        rows = source_macros.execute(
+            "SELECT * FROM project_overview(?)", [str(tmp_path)]
+        ).fetchall()
+        by_lang = {r[0]: r[2] for r in rows}
+        # Only the one own Python file survives; no JS / C++ from vendored trees.
+        assert by_lang.get("Python") == 1
+        assert "JavaScript" not in by_lang
+        assert "C++" not in by_lang
+
+    def test_include_ignored_restores_everything(self, source_macros, tmp_path):
+        (tmp_path / "main.py").write_text("print('hi')")
+        (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+        (tmp_path / "node_modules" / "dep" / "index.js").write_text("x")
+        filtered = source_macros.execute(
+            "SELECT sum(file_count) FROM project_overview(?)", [str(tmp_path)]
+        ).fetchone()[0]
+        unfiltered = source_macros.execute(
+            "SELECT sum(file_count) FROM project_overview(?, include_ignored := true)",
+            [str(tmp_path)],
+        ).fetchone()[0]
+        assert filtered == 1
+        assert unfiltered == 2
+
+
+class TestSourceFilesMacro:
+    def test_filters_vendored(self, source_macros, tmp_path):
+        (tmp_path / "app.py").write_text("x")
+        (tmp_path / "vendor" / "pkg").mkdir(parents=True)
+        (tmp_path / "vendor" / "pkg" / "v.py").write_text("x")
+        rows = source_macros.execute(
+            "SELECT file_path FROM source_files(?, '**/*.py')", [str(tmp_path)]
+        ).fetchall()
+        paths = {r[0] for r in rows}
+        assert any(p.endswith("/app.py") for p in paths)
+        assert not any("/vendor/" in p for p in paths)
+
+    def test_include_ignored_passthrough(self, source_macros, tmp_path):
+        (tmp_path / "app.py").write_text("x")
+        (tmp_path / "build").mkdir()
+        (tmp_path / "build" / "out.py").write_text("x")
+        filtered = source_macros.execute(
+            "SELECT count(*) FROM source_files(?, '**/*.py')", [str(tmp_path)]
+        ).fetchone()[0]
+        full = source_macros.execute(
+            "SELECT count(*) FROM source_files(?, '**/*.py', include_ignored := true)",
+            [str(tmp_path)],
+        ).fetchone()[0]
+        assert filtered == 1
+        assert full == 2
+
+    def test_excludes_git_submodule_contents(self, source_macros, tmp_path):
+        # A .gitmodules declaring a submodule dir whose (arbitrary) name no
+        # denylist could catch — only _submodule_prefixes excludes it.
+        (tmp_path / "src.py").write_text("x")
+        (tmp_path / ".gitmodules").write_text(
+            '[submodule "libfoo"]\n\tpath = libfoo\n\turl = https://x/libfoo\n'
+        )
+        (tmp_path / "libfoo" / "deep").mkdir(parents=True)
+        (tmp_path / "libfoo" / "deep" / "vendored.py").write_text("x")
+        rows = source_macros.execute(
+            "SELECT file_path FROM source_files(?, '**/*.py')", [str(tmp_path)]
+        ).fetchall()
+        paths = {r[0] for r in rows}
+        assert any(p.endswith("/src.py") for p in paths)
+        assert not any("/libfoo/" in p for p in paths)
+
+    def test_no_gitmodules_is_graceful(self, source_macros, tmp_path):
+        # No .gitmodules -> read_lines(ignore_errors) yields no rows, not an error.
+        (tmp_path / "a.py").write_text("x")
+        rows = source_macros.execute(
+            "SELECT count(*) FROM source_files(?, '**/*.py')", [str(tmp_path)]
+        ).fetchone()
+        assert rows[0] == 1
+
+    def test_keeps_uncommitted_new_files(self, source_macros, tmp_path):
+        # source_files is glob-based, so brand-new (uncommitted, untracked) own
+        # files are still surfaced — unlike a pure git-tracked listing.
+        (tmp_path / ".gitmodules").write_text(
+            '[submodule "vend"]\n\tpath = vend\n\turl = https://x/vend\n'
+        )
+        (tmp_path / "vend").mkdir()
+        (tmp_path / "vend" / "dep.py").write_text("x")
+        (tmp_path / "brand_new.py").write_text("x")  # never committed
+        rows = source_macros.execute(
+            "SELECT file_path FROM source_files(?, '**/*.py')", [str(tmp_path)]
+        ).fetchall()
+        paths = {r[0] for r in rows}
+        assert any(p.endswith("/brand_new.py") for p in paths)
+
 
 class TestFileLineCount:
     def test_single_file(self, source_macros):

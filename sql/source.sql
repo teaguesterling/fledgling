@@ -118,15 +118,93 @@ CREATE OR REPLACE MACRO list_files(pattern, commit := NULL) AS TABLE
         END
     );
 
+-- _is_vendored_path: TRUE when a path lives in a dependency, build, cache, VCS,
+-- or checked-in third-party tree that should be excluded from project
+-- discovery. Used by source_files / project_overview (and reused by squackit's
+-- AST tools) so the "what to ignore" policy has a single home in fledgling.
+-- Pattern-based, so it catches checked-in vendored trees (googletest,
+-- third_party, vendor) that git-awareness alone misses. Submodules are handled
+-- separately by _submodule_prefixes since their directory names are arbitrary.
+CREATE OR REPLACE MACRO _is_vendored_path(file_path) AS (
+       file_path LIKE '%/.git/%'
+    OR file_path LIKE '%/.svn/%'
+    OR file_path LIKE '%/.hg/%'
+    OR file_path LIKE '%/.venv/%'
+    OR file_path LIKE '%/venv/%'
+    OR file_path LIKE '%/node_modules/%'
+    OR file_path LIKE '%/bower_components/%'
+    OR file_path LIKE '%/__pycache__/%'
+    OR file_path LIKE '%/.mypy_cache/%'
+    OR file_path LIKE '%/.pytest_cache/%'
+    OR file_path LIKE '%/.ruff_cache/%'
+    OR file_path LIKE '%/.tox/%'
+    OR file_path LIKE '%/.idea/%'
+    OR file_path LIKE '%/.vscode/%'
+    OR file_path LIKE '%/dist/%'
+    OR file_path LIKE '%/build/%'
+    OR file_path LIKE '%/_build/%'
+    OR file_path LIKE '%/cmake-build-%/%'
+    OR file_path LIKE '%/CMakeFiles/%'
+    OR file_path LIKE '%-prefix/%'
+    OR file_path LIKE '%/.eggs/%'
+    OR file_path LIKE '%.egg-info/%'
+    -- checked-in third-party / vendored trees (not git-distinguishable)
+    OR file_path LIKE '%/vendor/%'
+    OR file_path LIKE '%/third_party/%'
+    OR file_path LIKE '%/third-party/%'
+    OR file_path LIKE '%/External/%'
+    OR file_path LIKE '%/googletest%'
+);
+
+-- _submodule_prefixes: directory prefixes (root-absolute, trailing slash) of any
+-- git submodules declared in root/.gitmodules. Empty when there are no submodules
+-- or the directory is not a git repo — read_lines(..., ignore_errors := true)
+-- yields no rows instead of an IO error on a missing .gitmodules. This is the
+-- git-aware half of the ignore policy: submodule contents are not gitignored and
+-- carry arbitrary names (e.g. duckdb/, rdkit/), so only .gitmodules identifies them.
+--
+-- Examples:
+--   SELECT * FROM _submodule_prefixes('/path/to/repo');
+CREATE OR REPLACE MACRO _submodule_prefixes(root := '.') AS TABLE
+    SELECT DISTINCT rtrim(root, '/') || '/' ||
+           trim(regexp_extract(content, 'path[ \t]*=[ \t]*(\S.*)', 1)) || '/' AS prefix
+    FROM read_lines(rtrim(root, '/') || '/.gitmodules', ignore_errors := true)
+    WHERE regexp_matches(content, 'path[ \t]*=[ \t]*\S');
+
+-- source_files: List a project's own source files, excluding vendored, build,
+-- cache, and submodule trees. This is the filtered discovery surface — prefer it
+-- over raw list_files/glob when you want "the project's code" rather than
+-- "every file on disk". Combines a pattern denylist (_is_vendored_path) with
+-- git-submodule exclusion (_submodule_prefixes). Pass include_ignored := true to
+-- get the unfiltered glob (the same set as list_files).
+--
+-- Examples:
+--   SELECT * FROM source_files('.');
+--   SELECT * FROM source_files('/path/to/repo', '**/*.py');
+--   SELECT * FROM source_files('.', '**/*', include_ignored := true);
+CREATE OR REPLACE MACRO source_files(root := '.', pattern := '**/*', include_ignored := false) AS TABLE
+    SELECT file AS file_path
+    FROM glob(rtrim(root, '/') || '/' || pattern)
+    WHERE include_ignored
+       OR (NOT _is_vendored_path(file)
+           AND NOT EXISTS (
+               SELECT 1 FROM _submodule_prefixes(root) s
+               WHERE file LIKE s.prefix || '%'
+           ))
+    ORDER BY file_path;
+
 -- project_overview: Summarize project contents by file type.
 -- Groups files by extension and maps to language names, giving a quick
--- overview of what a project contains. Filters out .git, .venv,
--- node_modules, __pycache__, and other dependency/build directories.
+-- overview of what a project contains. By default excludes vendored, build,
+-- cache, and git-submodule trees (via source_files) so the summary reflects
+-- the project's own code rather than its dependencies. Pass
+-- include_ignored := true to count everything on disk.
 --
 -- Examples:
 --   SELECT * FROM project_overview('/path/to/project');
 --   SELECT * FROM project_overview('.');
-CREATE OR REPLACE MACRO project_overview(root := '.') AS TABLE
+--   SELECT * FROM project_overview('.', include_ignored := true);
+CREATE OR REPLACE MACRO project_overview(root := '.', include_ignored := false) AS TABLE
     SELECT
         CASE extension
             WHEN 'py' THEN 'Python'
@@ -166,19 +244,7 @@ CREATE OR REPLACE MACRO project_overview(root := '.') AS TABLE
     FROM (
         SELECT
             lower(regexp_extract(file_path, '\.([^./]+)$', 1)) AS extension
-        FROM list_files(rtrim(root, '/') || '/**/*')
-        WHERE file_path NOT LIKE '%/.git/%'
-          AND file_path NOT LIKE '%/.venv/%'
-          AND file_path NOT LIKE '%/venv/%'
-          AND file_path NOT LIKE '%/node_modules/%'
-          AND file_path NOT LIKE '%/__pycache__/%'
-          AND file_path NOT LIKE '%/.mypy_cache/%'
-          AND file_path NOT LIKE '%/.pytest_cache/%'
-          AND file_path NOT LIKE '%/.tox/%'
-          AND file_path NOT LIKE '%/dist/%'
-          AND file_path NOT LIKE '%/build/%'
-          AND file_path NOT LIKE '%/.eggs/%'
-          AND file_path NOT LIKE '%/*.egg-info/%'
+        FROM source_files(root, '**/*', include_ignored := include_ignored)
     )
     GROUP BY ALL
     ORDER BY file_count DESC;
