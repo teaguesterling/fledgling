@@ -1,4 +1,29 @@
-## 0.11.1
+## 0.12.0
+
+### Added — vendor/submodule-aware project discovery (#47)
+`project_overview` and the new `source_files` macro now exclude dependency,
+build, cache, and third-party trees by default, so discovery reflects a
+project's own code instead of drowning in its vendored deps. On a DuckDB
+extension with `duckdb/` + `rdkit/` git submodules, `project_overview` dropped
+from **21,916 files to 71**; a `**/*.cpp` listing from **3,296 to 12**.
+
+- `_is_vendored_path(file_path)` — scalar predicate; the single source of truth
+  for "what to ignore". A path denylist (`.venv`, `node_modules`, `build`,
+  `dist`, `CMakeFiles`, `*-prefix`, `__pycache__`, caches, …) **plus** checked-in
+  third-party conventions (`vendor`, `third_party`, `External`, `googletest`)
+  that git-awareness alone can't distinguish.
+- `_submodule_prefixes(root)` — the git-aware half: parses `root/.gitmodules` to
+  exclude submodule trees, whose directory names are arbitrary (`duckdb/`,
+  `rdkit/`) and which no denylist could catch. Reads via
+  `read_lines(..., ignore_errors := true)`, so a missing `.gitmodules` (no
+  submodules, or not a git repo) yields no rows rather than an IO error.
+- `source_files(root, pattern := '**/*', include_ignored := false)` — the
+  filtered discovery surface: `glob` minus `_is_vendored_path` minus
+  `_submodule_prefixes`. Glob-based, so brand-new **uncommitted** files are still
+  surfaced (unlike a pure git-tracked listing) and it works in non-git dirs.
+- `project_overview(root, include_ignored := false)` — gains the same filtering
+  (via `source_files`) plus an `include_ignored := true` opt-out that restores
+  the old count-everything behavior.
 
 ### Fixed
 - **Pin `duckdb==1.5.2`.** The unbounded `duckdb>=1.5.0` let a fresh
