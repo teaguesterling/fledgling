@@ -1,3 +1,29 @@
+## Unreleased
+
+### Changed — Python `connect()` / `pro.server` sandboxed by default (#49)
+The shipped CLI server (`duckdb -init init-fledgling-*.sql`) has always locked
+the filesystem down at startup; the Python API did not, so `fledgling.connect()`
+and `python -m fledgling.pro.server` ran with external access enabled (a LOW
+consistency gap — not the shipped entrypoint). `connect()` now applies
+`lockdown()` by default on every path (modes 1–3 and the read-only cache
+reader): `allowed_directories = [root, 'git://'] (+ extra_dirs)`,
+`enable_external_access = false`, `lock_configuration = true`.
+
+- **Opt-out is explicit:** `connect(sandbox=False)` (also plumbed through
+  `create_server`). `attach()`/`configure()` still never lock a caller-owned
+  connection — call `fledgling.lockdown(con)` yourself (now documented).
+- `lockdown()` is now idempotent: a no-op on an already-locked/externally-
+  disabled connection (init files may lock themselves), and its default
+  allow-list honors the `extra_dirs` session variable like the init scripts.
+- Sandboxed read-only cache readers eagerly `LOAD fts` (~18 ms) because
+  lockdown disables the lazy autoload; `sandbox=False` restores the old
+  lazy behavior.
+- The edit CLI sandboxes to CWD plus the directories implied by its target
+  paths/patterns (it legitimately edits user-named files outside CWD).
+- Regression tests in `tests/test_sandbox.py::TestConnectLockdown` pin the
+  refusal (`read_source('/etc/hostname')` raises), the positive path (index
+  queries under `root` still work), and the opt-out.
+
 ## 0.12.0
 
 ### Added — vendor/submodule-aware project discovery (#47)

@@ -10,20 +10,47 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 import fledgling
 
 
-def _make_connection():
+def _target_dir(path_or_pattern: str) -> str | None:
+    """Directory implied by a CLI target path/glob (its non-glob prefix)."""
+    prefix = path_or_pattern.split("*")[0].split("?")[0].split("[")[0]
+    if not prefix:
+        return None  # bare glob like '**/*.py' — covered by CWD
+    if prefix.endswith(os.sep):
+        return os.path.abspath(prefix)
+    return os.path.dirname(os.path.abspath(prefix))
+
+
+def _make_connection(*targets: str):
     """Create a fledgling-enabled DuckDB connection for the edit CLI.
 
     Uses fledgling.connect() for the canonical init sequence: extensions,
     session root, macros (source + code + everything else). Replaces the
     old hand-rolled loader that called read_ast/load_sql manually and
     broke when code.sql referenced newer sitting_duck functions.
+
+    Sandboxed like every other fledgling connection, but with the sandbox
+    widened to the directories implied by the CLI's target paths/patterns:
+    the edit CLI legitimately operates on user-named files outside the CWD
+    (its arguments come from the invoking user's command line). We opt out
+    of connect()'s default CWD-only sandbox and apply lockdown() with the
+    computed allow-list instead.
     """
-    return fledgling.connect(init=False, modules=["sandbox", "source", "code"])
+    con = fledgling.connect(
+        init=False, modules=["sandbox", "source", "code"], sandbox=False
+    )
+    allowed = [os.getcwd(), "git://"]
+    for target in targets:
+        d = _target_dir(target) if target else None
+        if d and d not in allowed:
+            allowed.append(d)
+    fledgling.lockdown(con.con, allowed_dirs=allowed)
+    return con
 
 
 def _make_editor(con):
@@ -32,7 +59,7 @@ def _make_editor(con):
 
 
 def cmd_rename(args):
-    con = _make_connection()
+    con = _make_connection(args.file_pattern)
     ed = _make_editor(con)
     cs = ed.definitions(args.file_pattern, args.name).rename(args.new_name)
     if args.apply:
@@ -43,7 +70,7 @@ def cmd_rename(args):
 
 
 def cmd_remove(args):
-    con = _make_connection()
+    con = _make_connection(args.file_pattern)
     ed = _make_editor(con)
     cs = ed.definitions(args.file_pattern, args.name).remove()
     if args.apply:
@@ -54,7 +81,7 @@ def cmd_remove(args):
 
 
 def cmd_move(args):
-    con = _make_connection()
+    con = _make_connection(args.file_pattern, args.destination)
     ed = _make_editor(con)
     cs = ed.definitions(args.file_pattern, args.name).move_to(args.destination)
     if args.apply:
@@ -65,7 +92,7 @@ def cmd_move(args):
 
 
 def cmd_match_replace(args):
-    con = _make_connection()
+    con = _make_connection(args.file_pattern)
     from fledgling.edit.locate import match_replace
     cs = match_replace(con, args.file_pattern, args.pattern, args.template,
                        args.lang)

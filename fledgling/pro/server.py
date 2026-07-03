@@ -150,8 +150,13 @@ def create_server(
     init: Optional[str | bool] = None,
     modules: Optional[list[str]] = None,
     profile: str = "analyst",
+    sandbox: bool = True,
 ) -> FastMCP:
     """Create a FastMCP server with fledgling tools.
+
+    The server's connection is sandboxed by default (see
+    ``fledgling.connect``): filesystem access is restricted to the project
+    root and the configuration is locked, matching the shipped CLI server.
 
     Args:
         name: Server name.
@@ -159,13 +164,16 @@ def create_server(
         init: Init file path, False for sources, None for auto-discover.
         modules: SQL modules to load (when using sources).
         profile: Security profile.
+        sandbox: If True (default), lock the connection down to the project
+            root. Set False only for a deliberately unsandboxed server.
 
     Returns:
         A FastMCP server instance ready to .run().
     """
     from fastmcp import FastMCP
 
-    con = fledgling.connect(init=init, root=root, modules=modules, profile=profile)
+    con = fledgling.connect(init=init, root=root, modules=modules,
+                            profile=profile, sandbox=sandbox)
     mcp = FastMCP(name)
 
     # Infer smart defaults, merge with config file overrides
