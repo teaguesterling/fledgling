@@ -6,10 +6,13 @@ Used by tests, fledgling-pro (FastMCP), and direct Python consumers.
 Public surface:
 
   Top-level verbs:
-    connect(init=None, ...)  — new DuckDBPyConnection, configured, wrapped
-    attach(con, ...)         — configure an existing connection
+    connect(init=None, ...)  — new DuckDBPyConnection, configured, wrapped,
+                               and sandboxed by default (sandbox=False opts out)
+    attach(con, ...)         — configure an existing connection (caller-owned;
+                               NOT locked down — call lockdown() when done)
     configure(con, ...)      — the mid-level verb; sugar over the building blocks
     lockdown(con, ...)       — irreversible filesystem/config lockdown
+                               (applied automatically by connect())
 
   Compose helpers (building blocks):
     load_extensions(con)
@@ -282,6 +285,10 @@ def configure(
     extensions, session variables, metadata, help path, macros, and
     (optionally) a project-local `.fledgling-init.sql` overlay.
 
+    Does NOT sandbox the connection: `configure()` is a building block that
+    operates on a caller-owned connection, so applying the irreversible
+    `lockdown()` is left to the caller (`connect()` does it by default).
+
     Args:
         con: The connection to configure.
         root: Project root. Defaults to CWD.
@@ -339,21 +346,43 @@ def lockdown(
 
     This is irreversible within the connection lifetime.
 
+    Idempotent: if the connection's configuration is already locked, or
+    external access is already disabled (e.g. an init file applied its own
+    lockdown), this is a no-op — `allowed_directories` cannot be changed
+    once `enable_external_access` is off, and re-SETting a locked option
+    raises. The already-applied sandbox is at least as strict, so we keep it.
+
     Args:
         con: The connection to lock down. Accepts a Connection proxy or
             a raw DuckDBPyConnection.
         allowed_dirs: Directories to permit filesystem access to. If None,
-            reads `session_root` from the connection and defaults to
-            `[session_root, 'git://']`. Otherwise uses the list as-is.
+            reads `session_root` / `extra_dirs` from the connection and
+            defaults to `[session_root, 'git://'] + extra_dirs` (matching
+            the init-script lockdown). Otherwise uses the list as-is.
         lock_config: If True (default), also set `lock_configuration = true`
             so no further config changes are permitted. Set False for
             notebook/scripting use cases that still need to adjust other
             settings.
     """
+    locked, external = con.execute(
+        "SELECT current_setting('lock_configuration'),"
+        "       current_setting('enable_external_access')"
+    ).fetchone()
+    if locked:
+        return
+    if not external:
+        # External access already disabled; allowed_directories can no longer
+        # change. Just apply the config lock if requested.
+        if lock_config:
+            con.execute("SET lock_configuration = true")
+        return
     if allowed_dirs is None:
-        row = con.execute("SELECT getvariable('session_root')").fetchone()
-        session_root = row[0] if row else None
-        dirs = [session_root, "git://"] if session_root else ["git://"]
+        session_root, extra = con.execute(
+            "SELECT getvariable('session_root'), getvariable('extra_dirs')"
+        ).fetchone()
+        dirs = [session_root] if session_root else []
+        dirs.append("git://")
+        dirs.extend(extra or [])
     else:
         dirs = list(allowed_dirs)
     dirs_literal = "[" + ", ".join(f"'{d}'" for d in dirs) + "]"
@@ -374,8 +403,17 @@ def connect(
     extensions: bool = True,
     persist: Optional[str] = None,
     read_only: bool = False,
+    sandbox: bool = True,
 ) -> "Connection":
     """Create a DuckDB connection with fledgling macros loaded.
+
+    The connection is **sandboxed by default** (``sandbox=True``): after
+    setup, :func:`lockdown` restricts filesystem access to the project
+    root (plus ``git://``) and locks the configuration — the same
+    guarantee the shipped CLI server applies via its init scripts.
+    Pass ``sandbox=False`` for an explicitly unsandboxed connection
+    (e.g. indexing files spread across arbitrary directories), or call
+    :func:`lockdown` yourself with a custom ``allowed_dirs`` list.
 
     Three modes:
 
@@ -425,6 +463,12 @@ def connect(
             FTS index already live in the file, so configuration is skipped and
             only the query-side extensions are loaded (tolerantly). Multiple
             readers can share one cache while a single builder owns writes.
+        sandbox: If True (default), apply :func:`lockdown` before returning:
+            filesystem access restricted to ``[root, 'git://']`` (plus any
+            ``extra_dirs`` session variable set by an init file/overlay),
+            external access disabled, configuration locked. Set False for
+            an explicitly unsandboxed connection; this is the only supported
+            opt-out and should be a deliberate choice.
 
     Returns:
         A `Connection` proxy wrapping the new DuckDB connection with all
@@ -442,19 +486,29 @@ def connect(
     # extensions (tolerantly) and set the connection-scoped session vars.
     if ro:
         # Lean reader of a pre-built cache — return as soon as the file is open.
-        #  * No eager extension load: DuckDB autoloads `fts` on the first query that
-        #    references it (autoload_known_extensions, default on), so a non-FTS reader
-        #    pays nothing and an FTS reader pays the ~18ms autoload only on its first
-        #    match_bm25 query, not on every connect.
         #  * No SET VARIABLE: on a read-only connection the first one costs ~0.4s, and
         #    the persisted FTS macros don't need session vars. Readers that call
         #    session_root-dependent macros should use a read-write connection.
         #  * Tools discovery is lazy (see Tools), so Connection() itself is ~0ms.
+        #  * Lockdown still applies (default): read-only guards catalog writes,
+        #    not filesystem reads — an unsandboxed reader could still read files
+        #    outside the project. Plain SET statements cost ~ms here (unlike
+        #    SET VARIABLE), so this stays within the reader latency budget.
+        #  * Sandboxed readers eagerly LOAD the query-side extensions first:
+        #    lockdown disables extension loading, so the lazy `fts` autoload
+        #    that an unsandboxed reader relies on would fail post-lockdown.
+        #    That trades the ~18ms fts load on connect for the sandbox; pass
+        #    sandbox=False to get the historical lazy-autoload behavior.
+        if sandbox:
+            load_extensions(raw, _READONLY_EXTENSIONS, tolerant=True)
+            lockdown(raw, allowed_dirs=[root, "git://"])
         return Connection(raw)
 
     # Mode 1: explicit init file — user is authoritative, no source loading
     if init is not None and init is not False:
         _execute_init_file(raw, init, root)
+        if sandbox:
+            lockdown(raw)
         return Connection(raw)
 
     # Mode 2 / Mode 3: load from sources, optional overlay
@@ -467,6 +521,8 @@ def connect(
         extensions=extensions,
         overlay=overlay_enabled,
     )
+    if sandbox:
+        lockdown(raw)
     return Connection(raw)
 
 
@@ -483,6 +539,11 @@ def attach(
     Use when you already have a connection (notebook, test harness,
     embedding in a larger application) and want to attach fledgling's
     macros and variables without creating a new :memory: database.
+
+    Does NOT sandbox the connection: you own it, and lockdown is
+    irreversible, so it is not applied behind your back. Call
+    ``fledgling.lockdown(con)`` afterwards to get the same filesystem/
+    config lockdown that ``connect()`` applies by default.
 
     Example::
 
