@@ -1,3 +1,21 @@
+## 0.13.1 - 2026-08-15
+
+### Fixed — root-defaulting macros broke under the new sandbox (#53)
+Regression from #49/#50 in 0.13.0. Sandboxing restricts
+`allowed_directories` to the connection's root, but 16 macros defaulted their
+`root`/`repo` parameter to `'.'`, which resolves against the *process* CWD. Any
+caller connecting with `root != cwd` — the normal library pattern, a server
+pointed at a project while running elsewhere — got
+`Permission Error: Cannot access file "./**/*"` from `project_overview()` and
+every other root-defaulting macro. Callers that wrap these in `try/except`
+degraded silently instead of reporting it.
+
+Defaults now use `_session_root()`. Each affected module also declares
+`CREATE MACRO IF NOT EXISTS _session_root() AS '.'`, since the macro is
+otherwise only defined by `connect()` and a module loaded into a bare
+connection could not parse its own defaults. The sandbox is not widened —
+tests assert paths outside the root are still blocked.
+
 ## 0.13.0 - 2026-08-15
 
 ### Changed — Python `connect()` / `pro.server` sandboxed by default (#49)
