@@ -476,13 +476,19 @@ class TestGitDiffFileTool:
             "from_rev": "HEAD~1",
             "to_rev": "HEAD",
         })
-        lines = [l for l in text.strip().split("\n") if l]
+        # strip("\n"), not strip(): a context line's marker IS a space, and a
+        # bare strip() eats it off the first line. That made this test depend on
+        # what the previous commit happened to touch — it passed while the first
+        # changed file's diff opened with +/- and failed the moment one opened
+        # with a context line.
+        lines = [l for l in text.strip("\n").split("\n") if l]
         assert len(lines) > 0
         # Diff tools prepend a "# file:range" header line; the diff body lines
         # carry the +/- /space markers.
         body = [l for l in lines if not l.startswith("#")]
         assert body, "diff produced only a header / no body lines"
-        assert all(l[0] in ("+", "-", " ") for l in body)
+        offenders = [l for l in body if l[0] not in ("+", "-", " ")]
+        assert not offenders, f"{len(offenders)} of {len(body)} lines lack a marker: {offenders[:3]!r}"
 
 
 class TestSelectCodeTool:
