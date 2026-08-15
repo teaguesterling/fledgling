@@ -47,7 +47,10 @@ CREATE OR REPLACE MACRO read_source_text(
     match := NULL,
     commit := NULL
 ) AS TABLE
-    SELECT printf('%4d  %s', line_number, content) AS line
+    -- read_lines() returns content with its trailing newline attached, so a
+    -- formatted line already ends in one; emitting it as-is makes every
+    -- consumer that joins these rows produce a blank line between each pair.
+    SELECT printf('%4d  %s', line_number, rtrim(content, chr(13) || chr(10))) AS line
     FROM read_source(
         CASE WHEN commit IS NULL
              THEN file_path

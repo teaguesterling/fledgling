@@ -298,3 +298,36 @@ class TestMarkdownTruncation:
             "max_results": 0,
         }))
         assert "--- omitted" not in result
+
+
+class TestLineRendering:
+    """Rendered source lines must not be double-spaced.
+
+    ``read_lines()`` returns ``content`` with its trailing newline attached.
+    Both renderers interpolate that content into a numbered line and then join
+    the results with a newline, so an un-stripped line ends in one newline and
+    the join adds a second. The output was double-spaced everywhere, and every
+    line-counting caller — truncation limits included — saw twice the lines it
+    asked for. Nothing asserted the shape of a rendered line, so the only
+    symptom was a line-count assertion elsewhere.
+    """
+
+    @pytest.mark.anyio
+    async def test_no_blank_line_between_rendered_lines(self, mcp):
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "lines": "1-10",
+        }))
+        assert "\n\n\n" not in result
+        lines = result.split("\n")
+        # A run of numbered lines must not alternate with empties. Blank *source*
+        # lines render as a number with no text, e.g. "   2  " — not as "".
+        assert "" not in lines[:9], f"blank interleaved: {lines[:9]!r}"
+
+    @pytest.mark.anyio
+    async def test_line_count_matches_requested_range(self, mcp):
+        result = _text(await mcp.call_tool("read_source", {
+            "file_path": f"{PROJECT_ROOT}/tests/conftest.py",
+            "lines": "1-10",
+        }))
+        assert len(result.strip().split("\n")) == 10
