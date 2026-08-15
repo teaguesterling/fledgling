@@ -209,17 +209,19 @@ CREATE OR REPLACE MACRO find_code_grep(file_pattern, selector, lang := NULL) AS 
 -- view_code_text: Formatted text output for view_code results.
 -- Each match gets a heading (# file:start-end (name)) followed by
 -- numbered source lines. Used by the ViewCode MCP tool publication.
+-- rtrim: read_lines() keeps the trailing newline on content, which would
+-- otherwise double up against the chr(10) separators used here.
 CREATE OR REPLACE MACRO view_code_text(file_pattern, selector, lang := NULL, ctx := 0) AS TABLE
     SELECT printf('%s',
         CASE WHEN line_number = match_start AND match_start > 1
              THEN chr(10) || '# ' || file_path || ':' || match_start || '-' || match_end
                   || COALESCE(' (' || name || ')', '') || chr(10)
-                  || printf('%4d| %s', line_number, content)
+                  || printf('%4d| %s', line_number, rtrim(content, chr(13) || chr(10)))
              WHEN line_number = match_start
              THEN '# ' || file_path || ':' || match_start || '-' || match_end
                   || COALESCE(' (' || name || ')', '') || chr(10)
-                  || printf('%4d| %s', line_number, content)
-             ELSE printf('%4d| %s', line_number, content)
+                  || printf('%4d| %s', line_number, rtrim(content, chr(13) || chr(10)))
+             ELSE printf('%4d| %s', line_number, rtrim(content, chr(13) || chr(10)))
         END) AS line
     FROM view_code(file_pattern, selector, lang, ctx);
 

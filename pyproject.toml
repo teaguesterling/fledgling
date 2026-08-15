@@ -18,7 +18,14 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "duckdb==1.5.2",
+    # Ranged, not pinned to a single patch. DuckDB extensions are installed
+    # per DuckDB version (~/.duckdb/extensions/v<VER>/...), so pinning an exact
+    # patch strands the install on whatever extension builds exist for that one
+    # version: on 1.5.2 the newest published sitting_duck is f7b9c60, which
+    # returns 0 for every start_column, and no amount of reinstalling fixes it
+    # because newer builds are only published for newer DuckDB. Verified on
+    # 1.5.5: full suite green.
+    "duckdb>=1.5.2,<1.6",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +65,6 @@ pythonpath = ["."]
 
 [dependency-groups]
 test = [
-    "duckdb==1.5.2",
+    "duckdb>=1.5.2,<1.6",
     "pytest>=7.0",
 ]

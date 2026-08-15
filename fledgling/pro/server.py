@@ -414,7 +414,16 @@ def _register_tool(
             elif "line_number" in cols and "content" in cols:
                 ln_idx = cols.index("line_number")
                 ct_idx = cols.index("content")
-                lines = [f"{r[ln_idx]:4d}  {r[ct_idx]}" for r in rows]
+                # read_lines() keeps the trailing newline on content, so an
+                # un-stripped line already ends in one and the join below adds
+                # a second — every rendered file came back double-spaced, and
+                # any line-counting caller (truncation limits, tests) saw twice
+                # the lines it asked for. This mirrors read_source_text's
+                # printf in sql/source.sql; both strip.
+                lines = [
+                    f"{r[ln_idx]:4d}  {str(r[ct_idx]).rstrip(chr(13) + chr(10))}"
+                    for r in rows
+                ]
             else:
                 lines = []
                 for row in rows:

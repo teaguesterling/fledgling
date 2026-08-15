@@ -135,7 +135,7 @@ class Tools:
         self._discovered = False
         self._macros_data: dict[str, list[str]] = {}
         self._tool_info_data: dict[str, ToolInfo] = {}
-        self._source: str = "unknown"  # "mcp_registry" or "catalog"
+        self._source_data: str = "unknown"  # "mcp_registry" or "catalog"
         # Discovery (an mcp_list_tools() + catalog scan, ~80 ms) is deferred to first
         # access: a read-only FTS reader that only queries via `con.con` never pays it.
 
@@ -153,6 +153,21 @@ class Tools:
     def _tool_info(self) -> dict[str, "ToolInfo"]:
         self._ensure_discovered()
         return self._tool_info_data
+
+    @property
+    def _source(self) -> str:
+        """Where the macro list came from: "mcp_registry", or "catalog".
+
+        Lazy like _macros and _tool_info. Discovery is deferred to first
+        access, and this was a plain attribute, so reading it before anything
+        else touched the object returned the "unknown" initializer — the value
+        it holds only until discovery runs, which is never what a caller
+        asking "where did these come from?" wants. It reported "unknown" for a
+        connection whose macros would have been found the moment they were
+        asked for.
+        """
+        self._ensure_discovered()
+        return self._source_data
 
     # ── Discovery ────────────────────────────────────────────────────
 
@@ -175,7 +190,7 @@ class Tools:
                 info = mcp_tools[name]
                 info.params = params
                 self._tool_info_data[name] = info
-            self._source = "mcp_registry"
+            self._source_data = "mcp_registry"
         else:
             # Fallback: expose all non-underscore table macros, no metadata.
             self._macros_data = {
@@ -187,7 +202,7 @@ class Tools:
                 name: ToolInfo(macro_name=name, params=params)
                 for name, params in self._macros_data.items()
             }
-            self._source = "catalog"
+            self._source_data = "catalog"
 
     def _try_mcp_registry(self) -> Optional[dict[str, ToolInfo]]:
         """Query the MCP publication registry via `mcp_list_tools()`.
