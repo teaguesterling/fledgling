@@ -18,7 +18,14 @@
 -- Examples:
 --   SELECT * FROM structural_diff('src/main.py', 'HEAD~1', 'HEAD');
 --   SELECT * FROM structural_diff('lib/parser.py', 'main', 'feature-branch');
-CREATE OR REPLACE MACRO structural_diff(file, from_rev, to_rev, repo := '.') AS TABLE
+-- _session_root() fallback. connect() defines this with the real root before
+-- loading modules; CREATE ... IF NOT EXISTS means that definition wins and this
+-- one only applies when a module is loaded into a bare connection (as the tests
+-- do). Without it, every macro below fails to even parse its default with
+-- "Scalar Function with name _session_root does not exist".
+CREATE MACRO IF NOT EXISTS _session_root() AS '.';
+
+CREATE OR REPLACE MACRO structural_diff(file, from_rev, to_rev, repo := _session_root()) AS TABLE
     WITH from_defs AS (
         SELECT
             name,
@@ -83,7 +90,7 @@ CREATE OR REPLACE MACRO structural_diff(file, from_rev, to_rev, repo := '.') AS 
 -- Examples:
 --   SELECT * FROM changed_function_summary('HEAD~1', 'HEAD', '**/*.py');
 --   SELECT * FROM changed_function_summary('main', 'feature', 'src/**/*.py');
-CREATE OR REPLACE MACRO changed_function_summary(from_rev, to_rev, file_pattern, repo := '.') AS TABLE
+CREATE OR REPLACE MACRO changed_function_summary(from_rev, to_rev, file_pattern, repo := _session_root()) AS TABLE
     WITH changed AS (
         SELECT file_path, status
         FROM file_changes(from_rev, to_rev, repo)

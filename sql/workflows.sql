@@ -20,8 +20,15 @@
 --   SELECT * FROM explore_query();
 --   SELECT * FROM explore_query(root := '/path/to/project');
 --   SELECT * FROM explore_query(code_pattern := 'src/**/*.rs', doc_pattern := 'doc/**/*.md');
+-- _session_root() fallback. connect() defines this with the real root before
+-- loading modules; CREATE ... IF NOT EXISTS means that definition wins and this
+-- one only applies when a module is loaded into a bare connection (as the tests
+-- do). Without it, every macro below fails to even parse its default with
+-- "Scalar Function with name _session_root does not exist".
+CREATE MACRO IF NOT EXISTS _session_root() AS '.';
+
 CREATE OR REPLACE MACRO explore_query(
-    root := '.',
+    root := _session_root(),
     code_pattern := '**/*.py',
     doc_pattern := 'docs/**/*.md',
     top_n := 20,
@@ -145,7 +152,7 @@ CREATE OR REPLACE MACRO review_query(
     from_rev := 'HEAD~1',
     to_rev := 'HEAD',
     file_pattern := '**/*.py',
-    repo := '.',
+    repo := _session_root(),
     top_n := 20
 ) AS TABLE
     WITH
