@@ -1,4 +1,4 @@
-## Unreleased
+## 0.13.0 - 2026-08-15
 
 ### Changed — Python `connect()` / `pro.server` sandboxed by default (#49)
 The shipped CLI server (`duckdb -init init-fledgling-*.sql`) has always locked
@@ -23,6 +23,41 @@ reader): `allowed_directories = [root, 'git://'] (+ extra_dirs)`,
 - Regression tests in `tests/test_sandbox.py::TestConnectLockdown` pin the
   refusal (`read_source('/etc/hostname')` raises), the positive path (index
   queries under `root` still work), and the opt-out.
+
+### Fixed — rendered source was double-spaced (#51)
+`read_lines()` returns `content` with its trailing newline attached. Both
+renderers interpolate that into a numbered line and then join the results with
+a newline, so every rendered line ended in two: reading any file through
+`read_source` came back double-spaced, and every line-counting caller saw twice
+the lines it asked for.
+
+Fixed at both boundaries, which had drifted into copies of each other:
+`read_source_text`'s printf in `sql/source.sql`, and its Python mirror in
+`pro/server.py`. The MCP path uses only the latter, so fixing the macro alone
+changed nothing — they must stay in step. `view_code_text` in `sql/code.sql`
+had the same defect.
+
+### Fixed — `Tools._source` reported `"unknown"` (#51)
+Discovery is deferred to first access and `_macros` / `_tool_info` are
+properties that call `_ensure_discovered()`, but `_source` was a plain
+attribute still holding its `"unknown"` initializer. Reading it before anything
+else touched the object returned that initializer instead of where the macros
+came from. Now a lazy property like its siblings.
+
+### Changed — `duckdb` requirement relaxed to `>=1.5.2,<1.6` (#51)
+DuckDB extensions install **per DuckDB version**
+(`~/.duckdb/extensions/v<VER>/...`), so pinning an exact patch strands the
+install on whatever extension builds exist for that one version. On 1.5.2 the
+newest published `sitting_duck` is `f7b9c60`, which returns `0` for every
+`start_column`; reinstalling cannot fix it, because newer builds are published
+only for newer DuckDB. That is a silent wrong-answer failure, not an install
+error. Verified on 1.5.5.
+
+### Fixed — flaky diff-marker test (#52)
+`test_diff_markers_present` built its line list with `text.strip()`, but a
+context line's marker *is* a space, so the strip removed it from the first line
+only. The test passed or failed according to what the previous commit happened
+to touch.
 
 ## 0.12.0
 
