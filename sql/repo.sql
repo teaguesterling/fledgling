@@ -10,7 +10,14 @@
 --   SELECT * FROM recent_changes();
 --   SELECT * FROM recent_changes(10);
 --   SELECT * FROM recent_changes(5, '/path/to/repo');
-CREATE OR REPLACE MACRO recent_changes(n := 10, repo := '.') AS TABLE
+-- _session_root() fallback. connect() defines this with the real root before
+-- loading modules; CREATE ... IF NOT EXISTS means that definition wins and this
+-- one only applies when a module is loaded into a bare connection (as the tests
+-- do). Without it, every macro below fails to even parse its default with
+-- "Scalar Function with name _session_root does not exist".
+CREATE MACRO IF NOT EXISTS _session_root() AS '.';
+
+CREATE OR REPLACE MACRO recent_changes(n := 10, repo := _session_root()) AS TABLE
     SELECT
         commit_hash[:8] AS hash,
         author_name AS author,
@@ -25,7 +32,7 @@ CREATE OR REPLACE MACRO recent_changes(n := 10, repo := '.') AS TABLE
 -- Examples:
 --   SELECT * FROM branch_list();
 --   SELECT * FROM branch_list('/path/to/repo');
-CREATE OR REPLACE MACRO branch_list(repo := '.') AS TABLE
+CREATE OR REPLACE MACRO branch_list(repo := _session_root()) AS TABLE
     SELECT
         branch_name,
         commit_hash[:8] AS hash,
@@ -39,7 +46,7 @@ CREATE OR REPLACE MACRO branch_list(repo := '.') AS TABLE
 --
 -- Examples:
 --   SELECT * FROM tag_list();
-CREATE OR REPLACE MACRO tag_list(repo := '.') AS TABLE
+CREATE OR REPLACE MACRO tag_list(repo := _session_root()) AS TABLE
     SELECT
         tag_name,
         commit_hash[:8] AS hash,
@@ -56,7 +63,7 @@ CREATE OR REPLACE MACRO tag_list(repo := '.') AS TABLE
 -- Examples:
 --   SELECT * FROM repo_files('HEAD');
 --   SELECT * FROM repo_files('HEAD', '/path/to/repo');
-CREATE OR REPLACE MACRO repo_files(rev := 'HEAD', repo := '.') AS TABLE
+CREATE OR REPLACE MACRO repo_files(rev := 'HEAD', repo := _session_root()) AS TABLE
     SELECT
         file_path,
         file_ext,
@@ -72,7 +79,7 @@ CREATE OR REPLACE MACRO repo_files(rev := 'HEAD', repo := '.') AS TABLE
 -- Examples:
 --   SELECT * FROM file_at_version('README.md', 'HEAD~1');
 --   SELECT * FROM file_at_version('src/main.py', 'v1.0', '/path/to/repo');
-CREATE OR REPLACE MACRO file_at_version(file, rev, repo := '.') AS TABLE
+CREATE OR REPLACE MACRO file_at_version(file, rev, repo := _session_root()) AS TABLE
     SELECT
         file_path,
         ref,
@@ -87,7 +94,7 @@ CREATE OR REPLACE MACRO file_at_version(file, rev, repo := '.') AS TABLE
 -- Examples:
 --   SELECT * FROM file_changes('HEAD~1', 'HEAD');
 --   SELECT * FROM file_changes('main', 'feature-branch', '/path/to/repo');
-CREATE OR REPLACE MACRO file_changes(from_rev, to_rev, repo := '.') AS TABLE
+CREATE OR REPLACE MACRO file_changes(from_rev, to_rev, repo := _session_root()) AS TABLE
     SELECT
         COALESCE(a.file_path, b.file_path) AS file_path,
         CASE
@@ -111,7 +118,7 @@ CREATE OR REPLACE MACRO file_changes(from_rev, to_rev, repo := '.') AS TABLE
 -- Examples:
 --   SELECT * FROM file_diff('README.md', 'HEAD~1', 'HEAD');
 --   SELECT * FROM file_diff('src/main.py', 'main', 'feature', '/path/to/repo');
-CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := '.') AS TABLE
+CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := _session_root()) AS TABLE
     WITH raw_diff AS (
         SELECT diff_text
         FROM read_git_diff(
@@ -136,7 +143,7 @@ CREATE OR REPLACE MACRO file_diff(file, from_rev, to_rev, repo := '.') AS TABLE
 
 -- file_diff_text: Unified diff format for file_diff results.
 -- Prefixes each line with +/- /space. Used by GitDiffFile tool publication.
-CREATE OR REPLACE MACRO file_diff_text(file, from_rev, to_rev, repo := '.') AS TABLE
+CREATE OR REPLACE MACRO file_diff_text(file, from_rev, to_rev, repo := _session_root()) AS TABLE
     SELECT printf('%s %s',
         CASE line_type WHEN 'ADDED' THEN '+' WHEN 'REMOVED' THEN '-' ELSE ' ' END,
         content) AS line
@@ -150,7 +157,7 @@ CREATE OR REPLACE MACRO file_diff_text(file, from_rev, to_rev, repo := '.') AS T
 -- Examples:
 --   SELECT * FROM working_tree_status();
 --   SELECT * FROM working_tree_status('/path/to/repo');
-CREATE OR REPLACE MACRO working_tree_status(repo := '.') AS TABLE
+CREATE OR REPLACE MACRO working_tree_status(repo := _session_root()) AS TABLE
     WITH
         tracked AS (
             SELECT file_path

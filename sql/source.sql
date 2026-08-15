@@ -16,6 +16,13 @@
 --   SELECT * FROM read_source('src/main.py', '10-20');
 --   SELECT * FROM read_source('src/main.py', '42 +/-5');
 --   SELECT * FROM read_source('src/main.py', match := 'import');
+-- _session_root() fallback. connect() defines this with the real root before
+-- loading modules; CREATE ... IF NOT EXISTS means that definition wins and this
+-- one only applies when a module is loaded into a bare connection (as the tests
+-- do). Without it, every macro below fails to even parse its default with
+-- "Scalar Function with name _session_root does not exist".
+CREATE MACRO IF NOT EXISTS _session_root() AS '.';
+
 CREATE OR REPLACE MACRO read_source(file_path, lines := NULL, ctx := 0, match := NULL) AS TABLE
     SELECT line_number, content
     FROM (
@@ -168,7 +175,7 @@ CREATE OR REPLACE MACRO _is_vendored_path(file_path) AS (
 --
 -- Examples:
 --   SELECT * FROM _submodule_prefixes('/path/to/repo');
-CREATE OR REPLACE MACRO _submodule_prefixes(root := '.') AS TABLE
+CREATE OR REPLACE MACRO _submodule_prefixes(root := _session_root()) AS TABLE
     SELECT DISTINCT rtrim(root, '/') || '/' ||
            trim(regexp_extract(content, 'path[ \t]*=[ \t]*(\S.*)', 1)) || '/' AS prefix
     FROM read_lines(rtrim(root, '/') || '/.gitmodules', ignore_errors := true)
@@ -185,7 +192,7 @@ CREATE OR REPLACE MACRO _submodule_prefixes(root := '.') AS TABLE
 --   SELECT * FROM source_files('.');
 --   SELECT * FROM source_files('/path/to/repo', '**/*.py');
 --   SELECT * FROM source_files('.', '**/*', include_ignored := true);
-CREATE OR REPLACE MACRO source_files(root := '.', pattern := '**/*', include_ignored := false) AS TABLE
+CREATE OR REPLACE MACRO source_files(root := _session_root(), pattern := '**/*', include_ignored := false) AS TABLE
     SELECT file AS file_path
     FROM glob(rtrim(root, '/') || '/' || pattern)
     WHERE include_ignored
@@ -207,7 +214,7 @@ CREATE OR REPLACE MACRO source_files(root := '.', pattern := '**/*', include_ign
 --   SELECT * FROM project_overview('/path/to/project');
 --   SELECT * FROM project_overview('.');
 --   SELECT * FROM project_overview('.', include_ignored := true);
-CREATE OR REPLACE MACRO project_overview(root := '.', include_ignored := false) AS TABLE
+CREATE OR REPLACE MACRO project_overview(root := _session_root(), include_ignored := false) AS TABLE
     SELECT
         CASE extension
             WHEN 'py' THEN 'Python'
