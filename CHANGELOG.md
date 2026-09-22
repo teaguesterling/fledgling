@@ -1,5 +1,28 @@
 ## Unreleased
 
+### Fixed — doc and FTS macros broke when the markdown reader renamed its path column
+`read_markdown_sections(include_filepath := true)` and
+`read_markdown(include_filepath := true)` emit a column named `filename`. Four
+macros still selected `file_path` from them: `doc_outline`, `find_code_examples`
+and `doc_stats` in `docs.sql`, and the markdown branch of the `fts.content`
+union in `fts_rebuild.sql`.
+
+Because the reference sits in the macro bodies, this failed at LOAD time, not at
+call time — `Binder Error: Referenced column "file_path" not found in FROM
+clause! Candidate bindings: "filename", "title", "section_path", "level",
+"content"` — so any connection that loaded `docs.sql` or `fts_rebuild.sql` died
+outright, taking most of the test suite with it.
+
+The fix aliases `filename AS file_path` rather than renaming the output.
+`file_path` is the contract these macros publish: the tests assert it by name
+(`test_fts`, `test_code`) and squackit indexes results by it
+(`def_cols.index("file_path")`). Renaming the output would have swapped one
+silent breakage for another. `read_ast` still emits `file_path`, so the union's
+branches in `fts_rebuild.sql` agree again.
+
+No new regression test: the suite already covered this — the 30 `test_fts`
+errors were precisely this drift, and they pass again.
+
 ### Fixed — conversation macros could not bind against a real corpus
 `conversations.sql` bootstrapped `raw_conversations` with
 `read_json_auto(union_by_name=true)`, which infers a schema by unioning the keys

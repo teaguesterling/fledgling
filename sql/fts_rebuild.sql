@@ -28,7 +28,9 @@ INSERT INTO fts.content
 WITH all_rows AS (
     -- Markdown sections
     SELECT
-        file_path,
+        -- read_markdown_sections emits `filename`; the read_ast branches below
+        -- emit `file_path`, and a UNION needs them to agree.
+        filename AS file_path,
         start_line,
         end_line,
         'markdown'::VARCHAR     AS extractor,
