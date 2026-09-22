@@ -34,6 +34,53 @@ class TestLoadConversations:
         assert ".claude/projects/test-project/" in rows[0][0]
 
 
+class TestWideCorpusSchema:
+    """A real ~/.claude/projects is heterogeneous, and an INFERRED schema is not
+    stable across it.
+
+    read_json_auto(union_by_name=true) unions the keys of every record it reads.
+    Past DuckDB's map-inference threshold it stops producing named columns and
+    hands back one `json` column per record instead. Measured on a real
+    767-file corpus: one file infers 31 columns including `timestamp`, the whole
+    glob infers 3 (json, filename, _source_file), and every macro in this file
+    then fails to bind -- surfacing as the thoroughly misleading
+    'Column "timestamp" in REPLACE list not found in FROM clause'.
+
+    The other fixtures here write a handful of uniform records, so they can
+    never reach that threshold. This one crosses it deliberately: 40 files
+    contributing 240 distinct keys between them.
+    """
+
+    def test_declared_schema_survives_many_distinct_keys(self, con, tmp_path):
+        project_dir = tmp_path / ".claude" / "projects" / "wide-project"
+        project_dir.mkdir(parents=True)
+        for i in range(40):
+            with open(project_dir / f"c{i}.jsonl", "w") as f:
+                for j in range(3):
+                    record = {
+                        "uuid": f"u{i}-{j}",
+                        "sessionId": f"s{i}",
+                        "type": "user",
+                        "timestamp": f"2026-01-01T00:00:0{j}.000Z",
+                        "message": {"role": "user", "content": "hi"},
+                    }
+                    # Keys unique to this file. No single file is unusual; it is
+                    # the union across the corpus that tips inference over.
+                    record.update({f"extra_{i}_{k}": "v" for k in range(6)})
+                    f.write(json.dumps(record) + "\n")
+
+        con.execute(
+            f"SET VARIABLE conversations_root = '{tmp_path / '.claude' / 'projects'}'"
+        )
+        load_sql(con, "conversations.sql")
+
+        columns = {r[0] for r in con.execute("DESCRIBE raw_conversations").fetchall()}
+        assert columns == FALLBACK_SCHEMA_COLUMNS
+        assert con.execute("SELECT count(*) FROM raw_conversations").fetchone()[0] == 120
+        # The point of the schema: the macros still bind against it.
+        assert con.execute("SELECT count(*) FROM sessions()").fetchone()[0] == 40
+
+
 class TestSessions:
     def test_session_count(self, conversation_macros):
         rows = conversation_macros.execute(

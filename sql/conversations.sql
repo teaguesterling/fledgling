@@ -8,15 +8,40 @@
 -- Bootstrap: Create raw_conversations table.
 -- Uses query() for conditional dispatch: loads JSONL if files exist,
 -- otherwise creates an empty table with the expected schema.
+--
+-- The column list is DECLARED, not inferred. read_json_auto(union_by_name=true)
+-- unions the keys of every record it sees, and a real ~/.claude/projects is
+-- heterogeneous enough to cross DuckDB's map-inference threshold: past roughly
+-- 120 unioned keys it stops producing named columns and hands back one `json`
+-- column per record. Measured on a 767-file corpus: one file infers 31 columns
+-- including `timestamp`, the whole glob infers 3 (json, filename, _source_file)
+-- and `timestamp` is simply gone -- so every macro below fails to bind, and the
+-- first symptom is an unhelpful "Column timestamp in REPLACE list not found in
+-- FROM clause". sample_size=-1 does not help; only map_inference_threshold=-1
+-- or an explicit schema does.
+--
+-- Declaring the columns fixes that for good: it cannot drift with the corpus,
+-- it reads the 13 fields the macros actually use instead of 130+, and it makes
+-- this branch and the empty-table branch below share ONE schema by
+-- construction. `timestamp` arrives as TIMESTAMP, so the CAST is gone with it.
 SET VARIABLE _has_conversations = (SELECT count(*) > 0 FROM glob(
     getvariable('conversations_root') || '/*/*.jsonl'
 ));
 CREATE TABLE IF NOT EXISTS raw_conversations AS
-SELECT * REPLACE (CAST(timestamp AS TIMESTAMP) AS timestamp) FROM query(
+SELECT * FROM query(
     CASE WHEN getvariable('_has_conversations')
-    THEN 'SELECT *, filename AS _source_file FROM read_json_auto(
+    THEN 'SELECT *, filename AS _source_file FROM read_json(
         ''' || getvariable('conversations_root') || '/*/*.jsonl'',
-        union_by_name=true, maximum_object_size=33554432, filename=true,
+        columns={
+            ''uuid'': ''VARCHAR'', ''sessionId'': ''VARCHAR'', ''type'': ''VARCHAR'',
+            ''message'': ''STRUCT(role VARCHAR, content JSON, model VARCHAR, id VARCHAR, stop_reason VARCHAR, usage STRUCT(input_tokens BIGINT, output_tokens BIGINT, cache_creation_input_tokens BIGINT, cache_read_input_tokens BIGINT))'',
+            ''timestamp'': ''TIMESTAMP'', ''requestId'': ''VARCHAR'',
+            ''slug'': ''VARCHAR'', ''version'': ''VARCHAR'',
+            ''gitBranch'': ''VARCHAR'', ''cwd'': ''VARCHAR'',
+            ''isSidechain'': ''BOOLEAN'', ''isMeta'': ''BOOLEAN'',
+            ''parentUuid'': ''VARCHAR''
+        },
+        format=''newline_delimited'', maximum_object_size=33554432, filename=true,
         ignore_errors=true
     )'
     ELSE 'SELECT NULL::VARCHAR AS uuid, NULL::VARCHAR AS sessionId,
