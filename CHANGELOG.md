@@ -1,3 +1,36 @@
+## Unreleased
+
+### Fixed — conversation macros could not bind against a real corpus
+`conversations.sql` bootstrapped `raw_conversations` with
+`read_json_auto(union_by_name=true)`, which infers a schema by unioning the keys
+of every record it reads. A real `~/.claude/projects` is heterogeneous enough to
+cross DuckDB's map-inference threshold: past roughly 120 unioned keys the reader
+stops producing named columns and returns a single `json` column per record
+instead. Measured on a 767-file corpus — one file infers 31 columns including
+`timestamp`; the whole glob infers 3 (`json`, `filename`, `_source_file`), so
+`timestamp` is simply gone and every macro in the module fails to bind.
+`sample_size=-1` does not help; only `map_inference_threshold=-1` or an explicit
+schema does.
+
+The symptom pointed nowhere near the cause. The module raised `Binder Error:
+Column "timestamp" in REPLACE list not found in FROM clause` while loading, so
+`fledgling.connect()` failed outright — and consumers that treat a failed
+connect as "fledgling absent" degraded quietly rather than reporting it: pluckit
+falls back to a bare `duckdb.DuckDBPyConnection`, and squackit then died three
+layers away with `'_duckdb.DuckDBPyConnection' object has no attribute 'con'`.
+
+The bootstrap now DECLARES its columns instead of inferring them. It reads the
+13 fields the macros actually use rather than 130+, it cannot drift as the
+corpus grows, and it makes the populated branch and the empty-table branch share
+one schema by construction — the set `tests/test_conversations.py` already pins
+as `FALLBACK_SCHEMA_COLUMNS`. `timestamp` arrives typed, so the `REPLACE` cast
+is gone with it.
+
+The existing fixtures write a handful of uniform records and can never reach the
+threshold, so a regression test crosses it deliberately: 40 files contributing
+240 distinct keys, asserting the declared schema survives and the macros still
+bind.
+
 ## 0.13.1 - 2026-08-15
 
 ### Fixed — root-defaulting macros broke under the new sandbox (#53)
