@@ -81,6 +81,71 @@ class TestWideCorpusSchema:
         assert con.execute("SELECT count(*) FROM sessions()").fetchone()[0] == 40
 
 
+class TestMalformedRecords:
+    """A record that does not fit the declared schema must not vanish.
+
+    The bootstrap declares its columns and passes `ignore_errors=true`, which
+    invites an obvious worry: does a record whose `message` is the wrong shape
+    get skipped, leaving a silently short table? It does not. A value that
+    cannot be coerced lands as NULL — the field degrades, the row survives.
+
+    That distinction is the whole point of pinning it. A NULL field is visible
+    to anyone who looks at the row; a dropped row is invisible, and on a corpus
+    of hundreds of thousands of records nobody would notice the difference
+    between "this session had 40 messages" and "this session had 43, three of
+    which the reader rejected".
+    """
+
+    def test_malformed_records_degrade_to_null_rather_than_disappearing(self, con, tmp_path):
+        project_dir = tmp_path / ".claude" / "projects" / "malformed-project"
+        project_dir.mkdir(parents=True)
+
+        good = {
+            "uuid": "good", "sessionId": "s1", "type": "user",
+            "timestamp": "2026-01-01T00:00:00.000Z",
+            "message": {"role": "user", "content": "hi"},
+        }
+        records = [
+            good,
+            # `message` is a bare string where a STRUCT is declared
+            {**good, "uuid": "bad_message", "message": "just a string"},
+            # `timestamp` is not parseable as one
+            {**good, "uuid": "bad_timestamp", "timestamp": "not-a-date"},
+        ]
+        with open(project_dir / "c.jsonl", "w") as f:
+            for record in records:
+                f.write(json.dumps(record) + "\n")
+
+        con.execute(
+            f"SET VARIABLE conversations_root = '{tmp_path / '.claude' / 'projects'}'"
+        )
+        load_sql(con, "conversations.sql")
+
+        # The property that matters: every record is still there.
+        assert con.execute("SELECT count(*) FROM raw_conversations").fetchone()[0] == 3
+
+        # A message of the wrong shape becomes a struct of NULLs, not a lost row.
+        role = con.execute(
+            "SELECT message.role FROM raw_conversations WHERE uuid = 'bad_message'"
+        ).fetchone()[0]
+        assert role is None
+
+        # An unparseable timestamp nulls that column and leaves the rest alone.
+        row = con.execute(
+            "SELECT timestamp, message.role FROM raw_conversations "
+            "WHERE uuid = 'bad_timestamp'"
+        ).fetchone()
+        assert row[0] is None
+        assert row[1] == "user"
+
+        # And the well-formed record is untouched by its neighbours.
+        row = con.execute(
+            "SELECT message.role, timestamp IS NOT NULL FROM raw_conversations "
+            "WHERE uuid = 'good'"
+        ).fetchone()
+        assert row == ("user", True)
+
+
 class TestSessions:
     def test_session_count(self, conversation_macros):
         rows = conversation_macros.execute(
