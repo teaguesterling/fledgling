@@ -15,9 +15,14 @@
 --   SELECT * FROM doc_outline('docs/**/*.md', 2);
 --   SELECT * FROM doc_outline('**/*.md', search := 'install');
 --   SELECT * FROM doc_outline('**/*.md', search := '/^## (API|CLI)/');
+-- `include_filepath := true` yields a column named `filename`, not `file_path`.
+-- Every macro here aliases it back, because `file_path` is the OUTPUT contract
+-- these macros publish: the tests assert it by name and squackit indexes
+-- results by it (workflows.py does def_cols.index("file_path")). Renaming the
+-- output instead of aliasing the input would break every consumer quietly.
 CREATE OR REPLACE MACRO doc_outline(file_pattern, max_lvl := 3, search := NULL) AS TABLE
     SELECT
-        file_path,
+        filename AS file_path,
         section_id,
         section_path,
         level,
@@ -75,7 +80,7 @@ CREATE OR REPLACE MACRO read_doc_section(file_path, target_id) AS TABLE
 --   SELECT * FROM find_code_examples('README.md', 'sql');
 CREATE OR REPLACE MACRO find_code_examples(file_pattern, lang := NULL) AS TABLE
     SELECT
-        s.file_path,
+        s.filename AS file_path,          -- see doc_outline: the reader emits `filename`
         s.section_id AS section,
         s.title AS section_title,
         cb.language,
@@ -98,7 +103,7 @@ CREATE OR REPLACE MACRO find_code_examples(file_pattern, lang := NULL) AS TABLE
 --   SELECT * FROM doc_stats('docs/**/*.md');
 CREATE OR REPLACE MACRO doc_stats(file_pattern) AS TABLE
     SELECT
-        file_path,
+        filename AS file_path,            -- read_markdown drifted the same way
         md_stats(content).word_count AS word_count,
         md_stats(content).heading_count AS heading_count,
         md_stats(content).code_block_count AS code_block_count,
