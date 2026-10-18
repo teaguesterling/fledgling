@@ -1,4 +1,4 @@
-## Unreleased
+## 0.13.2 - 2026-10-18
 
 ### Fixed — doc and FTS macros broke when the markdown reader renamed its path column
 `read_markdown_sections(include_filepath := true)` and
