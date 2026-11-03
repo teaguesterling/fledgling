@@ -7,6 +7,7 @@ Two entry points:
 """
 
 import os
+import re
 import sys
 import subprocess
 
@@ -79,6 +80,93 @@ def main():
 # ── fledgling-mcp entry point ─────────────────────────────────────
 
 
+_LOAD_STATEMENT = re.compile(r"^\s*LOAD\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", re.M)
+_READ_DIRECTIVE = re.compile(r"^\s*\.read\s+'?([^'\s]+)'?\s*$", re.M)
+
+
+def _init_chain_extensions(entry_files, fledgling_home):
+    """Return the extension names the init chain LOADs, in order.
+
+    The profile init files carry no LOAD statements of their own — they
+    `.read` init-fledgling-base.sql, which is where the LOADs live — so the
+    chain has to be walked rather than the entry file scanned.  A relative
+    path in a `.read` directive resolves against fledgling_home, because
+    mcp_main() `.cd`s there before reading anything.
+    """
+    names = []
+    seen = set()
+    queue = [f for f in entry_files if f]
+    while queue:
+        path = os.path.realpath(queue.pop(0))
+        if path in seen or not os.path.isfile(path):
+            continue
+        seen.add(path)
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for name in _LOAD_STATEMENT.findall(text):
+            if name not in names:
+                names.append(name)
+        for ref in _READ_DIRECTIVE.findall(text):
+            queue.append(ref if os.path.isabs(ref) else os.path.join(fledgling_home, ref))
+    return names
+
+
+def _ensure_extensions(names):
+    """INSTALL the extensions the init chain LOADs, where they are missing.
+
+    `LOAD x` does not install x.  ~/.duckdb/extensions is keyed by DuckDB
+    version, so a fresh machine — or this machine after a DuckDB upgrade —
+    has an empty store for that version and the first LOAD in the init chain
+    fails.  An error inside a `.read` file is fatal to the CLI, so the server
+    dies there rather than serving degraded.
+
+    The install runs through the `duckdb` binary rather than the python duckdb
+    module.  The two are often different versions (measured on longbottom:
+    python 2.0.0 beside a CLI v1.5.6), and each reads only its own versioned
+    extension directory, so installing from python can fill a store the CLI
+    never looks at.
+
+    Only missing extensions are installed, so a warm store costs one extra
+    duckdb invocation (29ms measured) and no network.
+    """
+    if not names:
+        # The init chain always LOADs something, so an empty list means the
+        # scan above broke rather than that nothing is needed.  Not fatal: a
+        # hand-written init chain is allowed to load nothing.
+        print(
+            "Warning: found no LOAD statements in the init chain; "
+            "extensions will not be installed",
+            file=sys.stderr,
+        )
+        return
+
+    probe = subprocess.run(
+        ["duckdb", "-noheader", "-list", "-c",
+         "SELECT extension_name FROM duckdb_extensions() WHERE installed"],
+        capture_output=True, text=True,
+    )
+    # A failed probe is treated as "nothing installed": the INSTALLs below are
+    # then no-ops on a warm store, so the fallback costs latency, not failure.
+    present = set(probe.stdout.split()) if probe.returncode == 0 else set()
+
+    for name in names:
+        if name in present:
+            continue
+        # Most of what fledgling loads is a community extension; fts is core
+        # and installs without FROM community.
+        for statement in (f"INSTALL {name} FROM community", f"INSTALL {name}"):
+            attempt = subprocess.run(["duckdb", "-c", statement], capture_output=True, text=True)
+            if attempt.returncode == 0:
+                break
+        else:
+            print(
+                f"Error: cannot install DuckDB extension '{name}': "
+                f"{attempt.stderr.strip() or 'unknown error'}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
 def mcp_main():
     """MCP server entry point (fledgling-mcp command).
 
@@ -149,6 +237,10 @@ def mcp_main():
     local_init = os.path.join(root, ".fledgling-init.sql")
     if os.path.exists(local_init):
         cmd.extend(["-cmd", f".read '{local_init}'"])
+
+    # The extensions have to be on disk before the exec: LOAD does not install,
+    # and a failed LOAD inside the init is fatal to the CLI.
+    _ensure_extensions(_init_chain_extensions([init_file, local_init], fledgling_home))
 
     os.execvp("duckdb", cmd)
 
