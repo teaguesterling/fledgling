@@ -140,10 +140,14 @@ def _ensure_extensions(names):
         )
         return
 
+    # stdin is the MCP client's: by the time this runs the client may already
+    # have written its `initialize` frame there, and a child that reads stdin
+    # would eat it.  Measured: `duckdb -c` does not read stdin today, so this
+    # is insurance against a future version that does, not a fix.
     probe = subprocess.run(
         ["duckdb", "-noheader", "-list", "-c",
          "SELECT extension_name FROM duckdb_extensions() WHERE installed"],
-        capture_output=True, text=True,
+        stdin=subprocess.DEVNULL, capture_output=True, text=True,
     )
     # A failed probe is treated as "nothing installed": the INSTALLs below are
     # then no-ops on a warm store, so the fallback costs latency, not failure.
@@ -155,7 +159,10 @@ def _ensure_extensions(names):
         # Most of what fledgling loads is a community extension; fts is core
         # and installs without FROM community.
         for statement in (f"INSTALL {name} FROM community", f"INSTALL {name}"):
-            attempt = subprocess.run(["duckdb", "-c", statement], capture_output=True, text=True)
+            attempt = subprocess.run(
+                ["duckdb", "-c", statement],
+                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            )
             if attempt.returncode == 0:
                 break
         else:
