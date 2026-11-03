@@ -177,15 +177,34 @@ def load_extensions(
     of raising. Used by read-only readers of a persistent cache: build-only
     extensions (e.g. the AST/markdown extractors) cannot load on a read-only
     connection and are not needed to query the already-built FTS index.
+
+    An extension that will not load is installed and loaded again before the
+    failure is reported. `LOAD x` does not install x, and ~/.duckdb/extensions
+    is keyed by DuckDB version, so a fresh environment — or this one after a
+    DuckDB upgrade — has nothing to load. INSTALL is tried only after LOAD has
+    failed: a warm store then costs no network, and an extension installed
+    from somewhere other than the community repo is left as it is.
     """
     if extensions is None:
         extensions = _DEFAULT_EXTENSIONS
     for ext in extensions:
         try:
             con.execute(f"LOAD {ext}")
-        except Exception:
+            continue
+        except Exception as exc:
+            load_error = exc
+        # Most of what fledgling loads is a community extension; fts is core
+        # and installs without FROM community.
+        for statement in (f"INSTALL {ext} FROM community", f"INSTALL {ext}"):
+            try:
+                con.execute(statement)
+                con.execute(f"LOAD {ext}")
+            except Exception:
+                continue
+            break
+        else:
             if not tolerant:
-                raise
+                raise load_error
 
 
 def set_session_root(
